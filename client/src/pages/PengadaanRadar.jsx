@@ -93,7 +93,7 @@ export function PengadaanRadar({ onOpenAddRadar, onOpenTransaction }) {
 
   return (
     <div className="flex flex-col w-full">
-      <div className="p-space-lg space-y-space-xl max-w-[1440px] mx-auto w-full">
+      <div className="p-3 sm:p-space-md lg:p-space-lg space-y-space-xl max-w-[1440px] mx-auto w-full">
         {/* Header */}
         <section className="space-y-space-md">
           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-space-md">
@@ -111,20 +111,20 @@ export function PengadaanRadar({ onOpenAddRadar, onOpenTransaction }) {
                 Sinergi radar pemantau harga multi-platform dengan mesin kalkulasi keputusan belanja rasional berbasis urgensi, utilitas, dan kesiapan tabungan.
               </p>
             </div>
-            <div className="flex items-center gap-space-sm shrink-0">
+            <div className="flex items-center gap-space-sm shrink-0 flex-wrap">
               <button
                 onClick={handleRefresh}
-                className="bg-surface-container-high hover:bg-surface-bright text-on-surface text-xs font-semibold px-space-md py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-md"
+                className="bg-surface-container-high hover:bg-surface-bright text-on-surface text-xs font-semibold px-3 sm:px-space-md py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-md"
               >
                 <span className={`material-symbols-outlined text-[18px] text-secondary ${refreshing ? "animate-spin" : ""}`}>sync</span>
-                <span>Refresh Sinyal Harga</span>
+                <span>Refresh Sinyal</span>
               </button>
               <button
                 onClick={() => onOpenAddRadar?.()}
-                className="bg-primary hover:bg-primary-fixed text-on-primary text-xs font-bold px-space-lg py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(78,222,163,0.35)]"
+                className="bg-primary hover:bg-primary-fixed text-on-primary text-xs font-bold px-3.5 sm:px-space-lg py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(78,222,163,0.35)]"
               >
                 <span className="material-symbols-outlined text-[20px]">add_circle</span>
-                <span>+ Tambah Item / Radar Baru</span>
+                <span>+ Radar Baru</span>
               </button>
             </div>
           </div>
@@ -215,7 +215,7 @@ export function PengadaanRadar({ onOpenAddRadar, onOpenTransaction }) {
                         radarProduct: bestDeal,
                       })
                     }
-                    className="bg-primary hover:bg-primary-fixed text-on-primary text-xs font-bold px-space-lg py-3 rounded-xl flex items-center gap-2 shadow-lg"
+                    className="w-full sm:w-auto bg-primary hover:bg-primary-fixed text-on-primary text-xs font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg"
                   >
                     <span className="material-symbols-outlined text-[20px]">shopping_bag</span>
                     <span>Eksekusi & Catat ke SmartFin</span>
@@ -247,7 +247,7 @@ export function PengadaanRadar({ onOpenAddRadar, onOpenTransaction }) {
                 return (
                   <div
                     key={item.id}
-                    className={`bg-surface-container-low rounded-2xl p-space-lg shadow-xl relative overflow-hidden flex flex-col justify-between border transition-all ${
+                    className={`bg-surface-container-low rounded-2xl p-4 sm:p-space-lg shadow-xl relative overflow-hidden flex flex-col justify-between border transition-all ${
                       isExhausted ? "border-outline-variant/30 opacity-85" : "border-outline-variant/15"
                     }`}
                   >
@@ -318,11 +318,11 @@ export function PengadaanRadar({ onOpenAddRadar, onOpenTransaction }) {
                       </div>
                     </div>
 
-                    <div className="pt-space-md mt-space-md flex items-center gap-space-sm border-t border-outline-variant/10">
+                    <div className="pt-3 mt-3 flex items-center gap-2 border-t border-outline-variant/10">
                       {isExhausted ? (
                         <button
                           onClick={() => onOpenAddRadar?.(item)}
-                          className="w-full bg-secondary-container hover:bg-secondary text-on-secondary-container text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                          className="w-full bg-secondary-container hover:bg-secondary text-on-secondary-container text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all"
                         >
                           <span className="material-symbols-outlined text-[18px]">replay</span>
                           <span>Beli Lagi (Pantau Ulang dengan Qty Baru)</span>
@@ -331,7 +331,7 @@ export function PengadaanRadar({ onOpenAddRadar, onOpenTransaction }) {
                         <>
                           <button
                             onClick={() => handleAddSaving(item)}
-                            className="flex-1 bg-surface-container hover:bg-surface-bright text-on-surface text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                            className="px-3.5 py-2.5 bg-surface-container hover:bg-surface-bright text-on-surface text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shrink-0 shadow-sm active:scale-95"
                           >
                             <span className="material-symbols-outlined text-[18px] text-secondary">add_circle</span>
                             <span>+ Tabungan</span>
@@ -351,10 +351,10 @@ export function PengadaanRadar({ onOpenAddRadar, onOpenTransaction }) {
                                 radarProduct: item,
                               })
                             }
-                            className="flex-1 bg-primary hover:bg-primary-fixed text-on-primary text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 shadow-sm"
+                            className="flex-1 px-4 py-2.5 bg-primary hover:bg-primary-fixed text-on-primary text-xs font-extrabold rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all min-w-0"
                           >
-                            <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                            <span>Catat Pembelian {itemQty > 1 ? `(${itemQty} Unit)` : ""}</span>
+                            <span className="material-symbols-outlined text-[18px] shrink-0">check_circle</span>
+                            <span className="truncate">Catat Pembelian {itemQty > 1 ? `(${itemQty} Unit)` : ""}</span>
                           </button>
                         </>
                       )}

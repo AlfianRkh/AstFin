@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
 
-export function Sidebar() {
+export function Sidebar({ isOpen = false, onClose = () => {} }) {
   const location = useLocation();
   const currentPath = location.pathname;
   const { user, logout, isAdmin } = useAuth();
@@ -44,17 +44,43 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-72 bg-surface-container-lowest z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.4)] border-r border-outline-variant/10">
-      <div className="flex flex-col">
-        <div className="h-16 px-space-md flex items-center gap-space-sm bg-surface-container-low/60 border-b border-outline-variant/10">
-          <div className="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-extrabold text-lg shadow-sm">
-            <span className="material-symbols-outlined text-[24px]">all_inclusive</span>
+    <>
+      {/* Mobile Backdrop Overlay */}
+      <div
+        onClick={onClose}
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 lg:hidden ${
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        aria-hidden="true"
+      />
+
+      {/* Sidebar Drawer */}
+      <aside
+        className={`fixed left-0 top-0 h-full w-72 bg-surface-container-lowest z-50 flex flex-col justify-between shadow-2xl lg:shadow-[0_1px_8px_rgba(0,0,0,0.4)] border-r border-outline-variant/10 transform transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
+      >
+        <div className="flex flex-col">
+          <div className="h-16 px-space-md flex items-center justify-between bg-surface-container-low/60 border-b border-outline-variant/10">
+            <div className="flex items-center gap-space-sm min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-extrabold text-lg shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[24px]">all_inclusive</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-bold text-on-surface tracking-tight leading-none truncate">OmniLife Nexus</span>
+                <span className="text-[10px] text-primary uppercase tracking-widest mt-1 font-bold">Unified Life OS v2.4</span>
+              </div>
+            </div>
+
+            {/* Close Button on Mobile Drawer */}
+            <button
+              onClick={onClose}
+              className="lg:hidden w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-outline hover:text-on-surface flex items-center justify-center transition-colors ml-2"
+              aria-label="Tutup menu"
+            >
+              <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
           </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-sm font-bold text-on-surface tracking-tight leading-none truncate">OmniLife Nexus</span>
-            <span className="text-[10px] text-primary uppercase tracking-widest mt-1 font-bold">Unified Life OS v2.4</span>
-          </div>
-        </div>
 
         <div className="px-space-md pt-space-lg">
           <span className="text-[10px] font-bold text-outline uppercase tracking-wider px-space-sm">Core Operations</span>
@@ -65,6 +91,7 @@ export function Sidebar() {
                 <Link
                   key={item.path}
                   to={item.path}
+                  onClick={onClose}
                   className={`flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg transition-colors text-sm font-semibold ${
                     isActive
                       ? "bg-primary-container text-on-primary-container shadow-sm"
@@ -88,6 +115,7 @@ export function Sidebar() {
                 <Link
                   key={item.path}
                   to={item.path}
+                  onClick={onClose}
                   className={`flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg transition-colors text-sm font-semibold ${
                     isActive
                       ? "bg-primary-container text-on-primary-container shadow-sm"
@@ -132,5 +160,6 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+  </>
   );
 }

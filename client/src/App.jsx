@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
+import { BottomNav } from "./components/BottomNav";
 
 // Pages
 import { Login } from "./pages/Login";
@@ -25,6 +26,7 @@ import { AddEnvelopeModal } from "./components/modals/AddEnvelopeModal";
 
 function MainLayout() {
   const { user } = useAuth();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [modalScan, setModalScan] = useState(false);
   const [modalWallet, setModalWallet] = useState(false);
   const [initialWalletCategory, setInitialWalletCategory] = useState("cash");
@@ -70,10 +72,16 @@ function MainLayout() {
 
   return (
     <div className="flex min-h-screen bg-background font-sans text-on-surface antialiased">
-      <Sidebar />
-      <div className="pl-72 flex-1 flex flex-col min-w-0">
-        <Header onScanClick={() => setModalScan(true)} />
-        <main className="relative pt-16 bg-surface min-h-screen pb-12">
+      <Sidebar
+        isOpen={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
+      />
+      <div className="pl-0 lg:pl-72 flex-1 flex flex-col min-w-0 w-full overflow-x-hidden">
+        <Header
+          onToggleSidebar={() => setMobileSidebarOpen((prev) => !prev)}
+          onScanClick={() => setModalScan(true)}
+        />
+        <main className="relative pt-16 bg-surface min-h-screen pb-24 lg:pb-12">
           <Routes>
             <Route
               path="/"
@@ -156,6 +164,8 @@ function MainLayout() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        {/* Mobile Thumb-Friendly Bottom Navigation */}
+        <BottomNav onScanClick={() => setModalScan(true)} />
       </div>
 
       {/* Global Modals */}

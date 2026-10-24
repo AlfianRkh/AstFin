@@ -776,54 +776,43 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
             </div>
           )}
 
-          {/* Nominal & Kategori Pos */}
-          <div className="grid grid-cols-2 gap-2">
+          {/* Nominal & Kategori Pos - Grid Sejajar Row-by-Row */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-end">
+            <div className="min-h-[28px] flex items-end justify-between">
+              <label className="text-[11px] font-bold text-outline uppercase truncate leading-tight">
+                {isFromRadar ? "Nominal Beli (Rp)" : "Nominal (Rp)"}
+              </label>
+              {selectedWallet && (
+                <span className={`text-[10px] font-semibold shrink-0 ml-1 ${isOverBalance ? "text-error font-bold" : "text-on-surface-variant"}`}>
+                  Sisa: {availableBalance >= 1000000 ? `${(availableBalance / 1000000).toFixed(1)}jt` : `Rp ${availableBalance.toLocaleString("id-ID")}`}
+                </span>
+              )}
+            </div>
+            <div className="min-h-[28px] flex items-end">
+              <label className="text-[11px] font-bold text-outline uppercase leading-tight">
+                Kategori Pos ({type === "expense" ? "Pengeluaran" : "Pemasukan"})
+              </label>
+            </div>
+
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-outline uppercase">
-                  {isFromRadar ? "Nominal Pembelian (Rp)" : "Nominal (Rp)"}
-                </label>
-                {selectedWallet && (
-                  <span className={`text-[10px] font-semibold ${isOverBalance ? "text-error font-bold" : "text-on-surface-variant"}`}>
-                    Sisa: Rp {availableBalance.toLocaleString("id-ID")}
-                  </span>
-                )}
-              </div>
               <input
                 type="number"
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
-                className={`w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border focus:outline-none font-bold text-sm transition-colors ${
+                className={`w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border focus:outline-none font-bold text-sm transition-colors ${
                   isOverBalance
                     ? "border-error text-error focus:border-error bg-error-container/10"
                     : "border-outline-variant/20 focus:border-primary"
                 }`}
               />
-              {isFromRadar && (radarProduct?.current_price || initialData?.amount) && (
-                <div className="mt-1 flex items-center justify-between text-[10px]">
-                  <span className="text-outline">Harga Radar: Rp {Number(radarProduct?.current_price || initialData?.amount).toLocaleString("id-ID")}</span>
-                  {amount !== String(radarProduct?.current_price || initialData?.amount) && (
-                    <button
-                      type="button"
-                      onClick={() => setAmount(String(radarProduct?.current_price || initialData?.amount))}
-                      className="text-primary hover:underline font-bold"
-                    >
-                      Reset ke Harga Produk
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-outline uppercase mb-1">
-                Kategori Pos ({type === "expense" ? "Pengeluaran" : "Pemasukan"})
-              </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary"
+                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary font-medium"
               >
                 {availableCategories.map((cat) => (
                   <option key={cat} value={cat}>
@@ -833,6 +822,22 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
               </select>
             </div>
           </div>
+
+          {/* Info Radar jika dari radar */}
+          {isFromRadar && (radarProduct?.current_price || initialData?.amount) && (
+            <div className="flex items-center justify-between text-[10px] -mt-1 px-1">
+              <span className="text-outline">Harga Radar: Rp {Number(radarProduct?.current_price || initialData?.amount).toLocaleString("id-ID")}</span>
+              {amount !== String(radarProduct?.current_price || initialData?.amount) && (
+                <button
+                  type="button"
+                  onClick={() => setAmount(String(radarProduct?.current_price || initialData?.amount))}
+                  className="text-primary hover:underline font-bold"
+                >
+                  Reset ke Harga Produk
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Peringatan Nominal Melebihi Saldo yang Tersedia */}
           {isOverBalance && (
@@ -884,27 +889,32 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
             </div>
           )}
 
-          {/* Toko / Sumber & Tanggal */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-bold text-outline uppercase mb-1">
+          {/* Toko / Sumber & Tanggal - Grid Sejajar Row-by-Row */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-end">
+            <div className="min-h-[28px] flex items-end">
+              <label className="text-[11px] font-bold text-outline uppercase leading-tight">
                 {type === "income" ? "Sumber Dana / Pengirim" : "Nama Toko / Penerima"}
               </label>
+            </div>
+            <div className="min-h-[28px] flex items-end">
+              <label className="text-[11px] font-bold text-outline uppercase leading-tight">Tanggal</label>
+            </div>
+
+            <div>
               <input
                 type="text"
                 value={merchant}
                 onChange={(e) => setMerchant(e.target.value)}
                 placeholder={type === "income" ? "Misal: Setoran Tunai, Transfer Rekening" : "Misal: Superindo Merr"}
-                className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary"
+                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-outline uppercase mb-1">Tanggal</label>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary"
+                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary"
               />
             </div>
           </div>

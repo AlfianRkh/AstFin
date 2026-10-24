@@ -181,25 +181,30 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-outline uppercase flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[14px] text-primary">kitchen</span>
-                  <span>Zona Penyimpanan</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsAddingZone((v) => !v)}
-                  className="text-[10px] text-primary hover:underline font-bold flex items-center gap-0.5"
-                >
-                  <span className="material-symbols-outlined text-[13px]">{isAddingZone ? "close" : "add"}</span>
-                  <span>{isAddingZone ? "Batal" : "+ Zona"}</span>
-                </button>
-              </div>
+          {/* Zona Penyimpanan & Satuan - Grid Sejajar Row-by-Row */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-end">
+            <div className="min-h-[28px] flex items-end justify-between">
+              <label className="text-[11px] font-bold text-outline uppercase flex items-center gap-1 leading-tight">
+                <span className="material-symbols-outlined text-[14px] text-primary">kitchen</span>
+                <span>Zona Simpan</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsAddingZone((v) => !v)}
+                className="text-[10px] text-primary hover:underline font-bold flex items-center gap-0.5 shrink-0"
+              >
+                <span className="material-symbols-outlined text-[13px]">{isAddingZone ? "close" : "add"}</span>
+                <span>{isAddingZone ? "Batal" : "+ Zona"}</span>
+              </button>
+            </div>
 
+            <div className="min-h-[28px] flex items-end">
+              <label className="text-[11px] font-bold text-outline uppercase leading-tight">Satuan Bahan</label>
+            </div>
+
+            <div>
               {loadingZones ? (
-                <div className="py-2 px-3 text-outline text-xs bg-surface-container-low rounded-lg border border-outline-variant/20 flex items-center gap-1.5">
+                <div className="h-10 px-3 text-outline text-xs bg-surface-container-low rounded-lg border border-outline-variant/20 flex items-center gap-1.5">
                   <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
                   <span>Memuat...</span>
                 </div>
@@ -207,7 +212,7 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary font-medium"
+                  className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary font-medium"
                 >
                   {storageZones.map((z) => (
                     <option key={z.id || z.name} value={z.name}>
@@ -219,13 +224,10 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-outline uppercase">Satuan</label>
-              </div>
               <select
                 value={unit}
                 onChange={(e) => handleUnitChange(e.target.value)}
-                className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none"
+                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none"
               >
                 <option value="Kg">Kilogram (Kg)</option>
                 <option value="Gram">Gram (g)</option>
@@ -276,11 +278,20 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-bold text-outline uppercase mb-1">
-                {isPackageUnit ? `Qty Pembelian (${unit})` : `Qty Stok (${unit})`}
+          {/* Qty & Batas Minimum Restock - Grid Sejajar Row-by-Row */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-end">
+            <div className="min-h-[28px] flex items-end">
+              <label className="text-[11px] font-bold text-outline uppercase leading-tight truncate">
+                {isPackageUnit ? `Beli (${unit})` : `Qty Stok (${unit})`}
               </label>
+            </div>
+            <div className="min-h-[28px] flex items-end">
+              <label className="text-[11px] font-bold text-outline uppercase leading-tight truncate">
+                Min. Restock ({activeRestockUnit})
+              </label>
+            </div>
+
+            <div>
               <input
                 type="number"
                 step="any"
@@ -288,15 +299,10 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder={isPackageUnit ? "Contoh: 1, 2" : "Contoh: 2"}
-                className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary font-bold"
+                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary font-bold"
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-outline uppercase">
-                  Batas Minimum Restock ({activeRestockUnit})
-                </label>
-              </div>
               <div className="relative">
                 <input
                   type="number"
@@ -310,7 +316,7 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
                       ? "Contoh: 250"
                       : "Contoh: 5"
                   }
-                  className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none pr-12 font-medium"
+                  className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none pr-12 font-medium"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-outline font-bold">
                   {activeRestockUnit}
@@ -400,33 +406,42 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
             </div>
           )}
 
-          <div>
-            <label className="block text-[11px] font-bold text-outline uppercase mb-1">
-              Harga Beli Awal (Rp) <span className="text-[10px] text-outline font-normal">(Opsional)</span>
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-outline text-xs font-bold">Rp</span>
+          {/* Harga Beli Awal & Expiry Date - Grid Sejajar Row-by-Row */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-end">
+            <div className="min-h-[28px] flex items-end">
+              <label className="text-[11px] font-bold text-outline uppercase leading-tight truncate">
+                Harga Awal <span className="text-[10px] text-outline font-normal">(Opsional)</span>
+              </label>
+            </div>
+            <div className="min-h-[28px] flex items-end">
+              <label className="text-[11px] font-bold text-outline uppercase leading-tight truncate">
+                Tgl Kedaluwarsa *
+              </label>
+            </div>
+
+            <div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-outline text-xs font-bold">Rp</span>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="25000"
+                  className="w-full h-10 bg-surface-container-low rounded-lg pl-9 pr-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary font-medium text-xs"
+                />
+              </div>
+            </div>
+            <div>
               <input
-                type="number"
-                step="any"
-                min="0"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="Contoh: 25000"
-                className="w-full bg-surface-container-low rounded-lg pl-9 pr-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary font-medium text-xs"
+                type="date"
+                required
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none text-xs font-medium"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-outline uppercase mb-1">Tanggal Kedaluwarsa (Expiry Date)</label>
-            <input
-              type="date"
-              required
-              value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-              className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none"
-            />
           </div>
 
           <div className="flex items-center gap-2 pt-2">

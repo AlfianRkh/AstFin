@@ -124,7 +124,7 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
 
   return (
     <div className="flex flex-col w-full">
-      <div className="relative w-full overflow-hidden px-space-md lg:px-space-lg py-space-lg flex flex-col gap-space-lg">
+      <div className="relative w-full overflow-hidden px-3 sm:px-space-md lg:px-space-lg py-space-lg flex flex-col gap-space-lg">
         {/* Header */}
         <header className="relative flex flex-col gap-space-md">
           <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-space-md">
@@ -135,7 +135,7 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
                   StockPantry · SmartFin · PriceRadar Unified
                 </span>
               </div>
-              <h1 className="text-2xl lg:text-3xl font-extrabold text-on-surface tracking-tight">Pantry Inventory & Restock Supply Chain</h1>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-on-surface tracking-tight">Pantry Inventory & Restock Supply Chain</h1>
               <p className="text-sm text-on-surface-variant mt-1 max-w-2xl">
                 Manajemen logistik dapur rumah tangga terhubung: pelacak kedaluwarsa zero-waste, restock otomatis via scan struk kasir, dan komparasi harga komoditas belanja.
               </p>
@@ -303,17 +303,21 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
                     return (
                       <div
                         key={item.id}
-                        className="bg-surface-container-low rounded-xl p-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md border border-outline-variant/10"
+                        className="bg-surface-container-low rounded-2xl p-3 sm:p-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-outline-variant/10 shadow-sm hover:border-outline-variant/30 transition-all"
                       >
-                        <div className="flex items-center gap-space-md min-w-0">
-                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${isOutOfStock ? "bg-error/15 text-error" : isMenipis ? "bg-amber-400/15 text-amber-400" : "bg-surface-container text-primary"
-                            }`}>
-                            <span className="material-symbols-outlined text-[26px]">
+                        {/* Info Utama: Ikon + Nama + Status + Chip Badges */}
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                            isOutOfStock ? "bg-error/15 text-error" : isMenipis ? "bg-amber-400/15 text-amber-400" : "bg-surface-container text-primary"
+                          }`}>
+                            <span className="material-symbols-outlined text-[24px]">
                               {item.category === "Freezer" ? "severe_cold" : item.category === "Lemari Kering" ? "inventory" : "kitchen"}
                             </span>
                           </div>
-                          <div className="flex flex-col min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
+
+                          <div className="flex flex-col min-w-0 flex-1">
+                            {/* Nama & Status */}
+                            <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
                               <span className="text-sm font-bold text-on-surface truncate">{item.name}</span>
                               {isOutOfStock ? (
                                 <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[10px] font-bold">
@@ -329,58 +333,72 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 text-outline text-xs mt-0.5">
-                              <span className="text-secondary">{item.category}</span>
-                              <span>•</span>
-                              <span>Tersisa: <strong className="text-on-surface font-bold">{item.quantity} {item.unit}</strong></span>
-                              <span>•</span>
-                              <span>Exp: {item.expiry_date}</span>
+
+                            {/* Metadata Chip Badges */}
+                            <div className="flex items-center gap-1.5 flex-wrap mt-1 text-[11px]">
+                              <span className="bg-surface-container px-2 py-0.5 rounded-md text-secondary font-medium">
+                                {item.category}
+                              </span>
+                              <span className="bg-surface-container px-2 py-0.5 rounded-md text-on-surface font-semibold">
+                                Sisa: <strong className={isOutOfStock ? "text-error" : isMenipis ? "text-amber-400" : "text-primary"}>{item.quantity} {item.unit}</strong>
+                              </span>
+                              {item.expiry_date && (
+                                <span className="bg-surface-container px-2 py-0.5 rounded-md text-outline">
+                                  Exp: {item.expiry_date}
+                                </span>
+                              )}
                               {item.price > 0 && (
-                                <>
-                                  <span>•</span>
-                                  <span>Harga: <strong className="text-secondary font-semibold">{formatRupiah(item.price)}</strong></span>
-                                </>
+                                <span className="bg-surface-container px-2 py-0.5 rounded-md text-secondary font-medium">
+                                  {formatRupiah(item.price)}
+                                </span>
                               )}
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2.5 shrink-0 flex-wrap justify-end">
-                          <button
-                            onClick={() => handleOpenRestockModal(item)}
-                            title="Masukkan ke Smart Shopping List (Sesuaikan Detail & Harga)"
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all border ${shoppingList.some((s) => !s.is_checked && (s.pantry_item_id === item.id || s.name.toLowerCase() === item.name.toLowerCase()))
-                                ? "bg-secondary-container/20 text-secondary border-secondary/40 hover:bg-secondary-container/30"
-                                : "bg-surface-container hover:bg-secondary-container/30 text-on-surface hover:text-secondary border-outline-variant/20 hover:border-secondary/40"
-                              }`}
-                          >
-                            <span className="material-symbols-outlined text-[16px] text-secondary">add_shopping_cart</span>
-                            <span>+ Belanja</span>
-                          </button>
-
-                          <div className="flex items-center bg-surface-container rounded-lg p-1">
+                        {/* Toolbar Aksi: Di Mobile Membentang Rapi dengan Border Pemisah */}
+                        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t border-outline-variant/10 sm:border-0 w-full sm:w-auto">
+                          {/* Stepper Qty */}
+                          <div className="flex items-center bg-surface-container rounded-xl p-1 shadow-inner">
                             <button
                               onClick={() => handleUpdateQty(item, -1)}
-                              className="w-7 h-7 rounded bg-surface-container-high hover:bg-surface-bright text-on-surface flex items-center justify-center font-bold text-sm"
+                              className="w-8 h-8 rounded-lg bg-surface-container-high hover:bg-surface-bright active:scale-95 text-on-surface flex items-center justify-center font-bold text-sm transition-transform"
                             >
                               -1
                             </button>
-                            <span className="w-10 text-center text-sm font-bold text-on-surface">{item.quantity}</span>
+                            <span className="min-w-[36px] px-1 text-center text-xs font-extrabold text-on-surface">{item.quantity}</span>
                             <button
                               onClick={() => handleUpdateQty(item, 1)}
-                              className="w-7 h-7 rounded bg-surface-container-high hover:bg-surface-bright text-on-surface flex items-center justify-center font-bold text-sm"
+                              className="w-8 h-8 rounded-lg bg-surface-container-high hover:bg-surface-bright active:scale-95 text-on-surface flex items-center justify-center font-bold text-sm transition-transform"
                             >
                               +1
                             </button>
                           </div>
 
-                          <button
-                            onClick={() => handleDeletePantryItem(item.id)}
-                            title="Hapus bahan"
-                            className="text-outline hover:text-error transition-colors p-1"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">delete</span>
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            {/* Tombol Belanja */}
+                            <button
+                              onClick={() => handleOpenRestockModal(item)}
+                              title="Masukkan ke Smart Shopping List (Sesuaikan Detail & Harga)"
+                              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border shadow-sm active:scale-95 ${
+                                shoppingList.some((s) => !s.is_checked && (s.pantry_item_id === item.id || s.name.toLowerCase() === item.name.toLowerCase()))
+                                  ? "bg-secondary-container/30 text-secondary border-secondary/40 hover:bg-secondary-container/40"
+                                  : "bg-surface-container hover:bg-secondary-container/30 text-on-surface hover:text-secondary border-outline-variant/20 hover:border-secondary/40"
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-[16px] text-secondary">add_shopping_cart</span>
+                              <span className="text-[11px] font-bold">+ Belanja</span>
+                            </button>
+
+                            {/* Tombol Hapus */}
+                            <button
+                              onClick={() => handleDeletePantryItem(item.id)}
+                              title="Hapus bahan"
+                              className="w-8 h-8 rounded-xl bg-surface-container hover:bg-error-container/20 text-outline hover:text-error transition-colors flex items-center justify-center"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">delete</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );

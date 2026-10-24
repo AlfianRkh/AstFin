@@ -54,7 +54,7 @@ export function Dashboard({ onOpenScan, onOpenTransaction, onOpenDebt, onOpenRad
 
   return (
     <div className="flex flex-col w-full">
-      <div className="relative w-full overflow-hidden px-space-lg py-space-lg lg:px-margin-desktop lg:py-space-xl">
+      <div className="relative w-full overflow-visible px-3 sm:px-space-md lg:px-margin-desktop py-space-md lg:py-space-xl">
         <div className="pointer-events-none absolute -top-40 right-1/4 -z-10 h-96 w-96 rounded-full bg-primary/10 blur-[120px]"></div>
         <div className="pointer-events-none absolute -top-20 left-10 -z-10 h-72 w-72 rounded-full bg-secondary/10 blur-[100px]"></div>
 
@@ -68,16 +68,18 @@ export function Dashboard({ onOpenScan, onOpenTransaction, onOpenDebt, onOpenRad
               </span>
               <span className="text-[10px] text-outline tracking-wider uppercase font-semibold">Node #OMNI-JKT-01</span>
             </div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold text-on-surface tracking-tight">Executive OmniCommand Dashboard</h1>
-            <p className="text-sm text-on-surface-variant mt-1 leading-relaxed">
+            <h1 className="text-lg sm:text-2xl lg:text-3xl font-extrabold text-on-surface tracking-tight break-words">
+              Executive OmniCommand Dashboard
+            </h1>
+            <p className="text-xs sm:text-sm text-on-surface-variant mt-1 leading-relaxed">
               Pusat komando terpadu mengintegrasikan likuiditas kas, buku utang-piutang, radar harga belanja, matriks keputusan wishlist, dan logistik dapur rumah tangga.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-space-sm shrink-0">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 w-full lg:w-auto">
             <button
               onClick={handleReconcile}
-              className="group relative flex items-center gap-1.5 bg-surface-container-high hover:bg-surface-bright text-on-surface px-space-md py-2 rounded-xl transition-all shadow-sm text-xs font-semibold"
+              className="group relative flex items-center justify-center gap-2 bg-surface-container-high hover:bg-surface-bright text-on-surface px-4 py-2.5 rounded-xl transition-all shadow-sm text-xs font-semibold w-full sm:w-auto"
             >
               <span className={`material-symbols-outlined text-secondary-fixed text-[18px] ${reconciling ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`}>
                 {reconciled ? "verified" : "sync"}
@@ -85,10 +87,10 @@ export function Dashboard({ onOpenScan, onOpenTransaction, onOpenDebt, onOpenRad
               <span>{reconciled ? "Rekonsiliasi Sukses!" : reconciling ? "Menyinkronkan..." : "⚡ Rekonsiliasi Otomatis"}</span>
             </button>
 
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <button
                 onClick={() => setShowQuickHub(!showQuickHub)}
-                className="flex items-center gap-2 bg-primary-container hover:bg-primary text-on-primary-container px-space-md py-2 rounded-xl transition-all text-xs font-bold shadow-[0_0_20px_rgba(16,185,129,0.35)]"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary-container hover:bg-primary text-on-primary-container px-4 py-2.5 rounded-xl transition-all text-xs font-bold shadow-[0_0_20px_rgba(16,185,129,0.35)]"
               >
                 <span className="material-symbols-outlined text-[18px]">bolt</span>
                 <span>+ Tindakan Cepat</span>
@@ -96,58 +98,64 @@ export function Dashboard({ onOpenScan, onOpenTransaction, onOpenDebt, onOpenRad
               </button>
 
               {showQuickHub && (
-                <div className="absolute right-0 mt-2 w-64 rounded-xl bg-surface-container-high p-2 shadow-2xl z-50 border border-surface-container-highest">
-                  <button
-                    onClick={() => {
-                      setShowQuickHub(false);
-                      onOpenTransaction?.();
-                    }}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-primary text-[18px]">receipt_long</span>
-                    <span>Input Transaksi Kas</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowQuickHub(false);
-                      onOpenScan?.();
-                    }}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-secondary text-[18px]">document_scanner</span>
-                    <span>Pindai Struk Kasir AI</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowQuickHub(false);
-                      onOpenDebt?.();
-                    }}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-secondary text-[18px]">add_card</span>
-                    <span>Catat Pinjaman/Hutang</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowQuickHub(false);
-                      onOpenRadar?.();
-                    }}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-tertiary text-[18px]">bookmark_add</span>
-                    <span>Tambah Radar Harga</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowQuickHub(false);
-                      onOpenPantry?.();
-                    }}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-primary text-[18px]">inventory_2</span>
-                    <span>Tambah Stok Dapur</span>
-                  </button>
-                </div>
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowQuickHub(false)}
+                  />
+                  <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-full sm:w-64 rounded-2xl bg-surface-container-high p-2 shadow-2xl z-50 border border-surface-container-highest animate-in fade-in zoom-in-95 duration-150">
+                    <button
+                      onClick={() => {
+                        setShowQuickHub(false);
+                        onOpenTransaction?.();
+                      }}
+                      className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-primary text-[18px]">receipt_long</span>
+                      <span>Input Transaksi Kas</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowQuickHub(false);
+                        onOpenScan?.();
+                      }}
+                      className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-secondary text-[18px]">document_scanner</span>
+                      <span>Pindai Struk Kasir AI</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowQuickHub(false);
+                        onOpenDebt?.();
+                      }}
+                      className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-secondary text-[18px]">add_card</span>
+                      <span>Catat Pinjaman/Hutang</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowQuickHub(false);
+                        onOpenRadar?.();
+                      }}
+                      className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-tertiary text-[18px]">bookmark_add</span>
+                      <span>Tambah Radar Harga</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowQuickHub(false);
+                        onOpenPantry?.();
+                      }}
+                      className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-primary text-[18px]">inventory_2</span>
+                      <span>Tambah Stok Dapur</span>
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>

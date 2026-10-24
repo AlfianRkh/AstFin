@@ -96,7 +96,7 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
 
   return (
     <div className="flex flex-col w-full">
-      <div className="px-space-md lg:px-space-xl pt-space-lg pb-space-md flex flex-col gap-space-md">
+      <div className="px-3 sm:px-space-md lg:px-space-xl pt-space-lg pb-space-md flex flex-col gap-space-md">
         <div className="flex items-center justify-between flex-wrap gap-space-sm">
           <div className="flex items-center gap-space-xs text-xs text-outline">
             <span className="text-on-surface-variant font-medium">OMNILIFE NEXUS</span>
@@ -113,7 +113,7 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
 
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-space-md">
           <div className="flex flex-col max-w-3xl">
-            <h1 className="text-2xl lg:text-3xl text-on-surface tracking-tight font-extrabold flex items-center gap-3">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl text-on-surface tracking-tight font-extrabold flex items-center gap-2 sm:gap-3 flex-wrap">
               Unified Financial Matrix & Cashflow Ledger
               <span className="text-[10px] bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-bold">PRO DUAL-CORE</span>
             </h1>
