@@ -48,12 +48,8 @@ export function AuthProvider({ children }) {
 
   const register = async (userData) => {
     const res = await api.register(userData);
-    const { token: newToken, user: newUser } = res.data;
-    setToken(newToken);
-    setUser(newUser);
-    localStorage.setItem("omni_token", newToken);
-    localStorage.setItem("omni_user", JSON.stringify(newUser));
-    return newUser;
+    // Don't auto-login so the user verifies credentials on the login screen
+    return res.data;
   };
 
   const logout = () => {

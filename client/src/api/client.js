@@ -22,7 +22,12 @@ export async function request(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(data.error || data.message || `Request failed with status ${response.status}`);
+    const err = new Error(data.error || data.message || `Request failed with status ${response.status}`);
+    err.data = data;
+    err.status = response.status;
+    err.requires_verification = data.requires_verification;
+    err.email = data.email;
+    throw err;
   }
 
   return data;
@@ -32,12 +37,16 @@ export const api = {
   // Auth
   login: (credentials) => request("/auth/login", { method: "POST", body: JSON.stringify(credentials) }),
   register: (userData) => request("/auth/register", { method: "POST", body: JSON.stringify(userData) }),
+  verifyEmail: (data) => request("/auth/verify-email", { method: "POST", body: JSON.stringify(data) }),
+  resendVerificationCode: (data) => request("/auth/resend-verification", { method: "POST", body: JSON.stringify(data) }),
   getMe: () => request("/auth/me"),
   getRoles: () => request("/auth/roles"),
 
   // Admin
   getUsers: () => request("/admin/users"),
+  createUser: (userData) => request("/admin/users", { method: "POST", body: JSON.stringify(userData) }),
   updateUserRole: (id, roleName) => request(`/admin/users/${id}/role`, { method: "PUT", body: JSON.stringify({ role_name: roleName }) }),
+  deleteUser: (id) => request(`/admin/users/${id}`, { method: "DELETE" }),
 
   // Dashboard
   getDashboardSummary: () => request("/dashboard/summary"),
@@ -97,4 +106,29 @@ export const api = {
   checkoutShoppingList: (data) => request("/shopping/checkout", { method: "POST", body: JSON.stringify(data) }),
   toggleShoppingItem: (id) => request(`/shopping/${id}/toggle`, { method: "PUT" }),
   deleteShoppingItem: (id) => request(`/shopping/${id}`, { method: "DELETE" }),
+
+  // Compare Price Product
+  getStores: () => request("/price/stores"),
+  createStore: (data) => request("/price/stores", { method: "POST", body: JSON.stringify(data) }),
+  updateStore: (id, data) => request(`/price/stores/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteStore: (id) => request(`/price/stores/${id}`, { method: "DELETE" }),
+
+  getPriceCategories: () => request("/price/categories"),
+  getPriceProducts: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/price/products${q ? `?${q}` : ""}`);
+  },
+  createPriceProduct: (data) => request("/price/products", { method: "POST", body: JSON.stringify(data) }),
+  getPriceProductDetail: (id) => request(`/price/products/${id}`),
+  deletePriceProduct: (id) => request(`/price/products/${id}`, { method: "DELETE" }),
+  addPriceEntry: (productId, data) => request(`/price/products/${productId}/entries`, { method: "POST", body: JSON.stringify(data) }),
+  deletePriceEntry: (id) => request(`/price/entries/${id}`, { method: "DELETE" }),
+
+  checkPrice: (data) => request("/price/check", { method: "POST", body: JSON.stringify(data) }),
+  getPriceSettings: () => request("/price/settings"),
+  updatePriceSettings: (data) => request("/price/settings", { method: "POST", body: JSON.stringify(data) }),
+
+  // OSM Geocoding Proxy
+  searchGeo: (query) => request(`/geo/search?q=${encodeURIComponent(query)}`),
+  reverseGeo: (lat, lng) => request(`/geo/reverse?lat=${lat}&lng=${lng}`),
 };

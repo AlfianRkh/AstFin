@@ -200,6 +200,93 @@ CREATE INDEX IF NOT EXISTS idx_pantry_expiry ON pantry_items(expiry_date ASC);
 CREATE INDEX IF NOT EXISTS idx_shopping_user_checked ON shopping_items(user_id, is_checked);
 
 -- =============================================================================
+-- COMPARE PRICE PRODUCT TABLES & INDEXES
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS stores (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(150) NOT NULL,
+    store_type VARCHAR(50) NOT NULL DEFAULT 'minimarket',
+    address_text TEXT,
+    lat DOUBLE PRECISION,
+    lng DOUBLE PRECISION,
+    is_mobile BOOLEAN DEFAULT FALSE,
+    public_store_id INTEGER,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS product_categories (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    group_code VARCHAR(50) NOT NULL,
+    shelf_life_room_days INTEGER,
+    shelf_life_chiller_days INTEGER,
+    shelf_life_freezer_days INTEGER,
+    threshold_cheap_pct DOUBLE PRECISION DEFAULT 10.0,
+    threshold_expensive_pct DOUBLE PRECISION DEFAULT 15.0,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS price_products (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category_id INTEGER REFERENCES product_categories(id) ON DELETE SET NULL,
+    canonical_product_id INTEGER,
+    name VARCHAR(200) NOT NULL,
+    name_normalized VARCHAR(200) NOT NULL,
+    base_unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS price_entries (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES price_products(id) ON DELETE CASCADE,
+    store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL,
+    entry_type VARCHAR(30) NOT NULL DEFAULT 'observation',
+    purchase_unit VARCHAR(50) NOT NULL,
+    purchase_qty DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    units_per_package DOUBLE PRECISION,
+    total_units DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    price_total DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    discount_type VARCHAR(20) DEFAULT 'amount',
+    discount_value DOUBLE PRECISION DEFAULT 0.0,
+    discount_amount DOUBLE PRECISION DEFAULT 0.0,
+    price_final DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    price_per_unit DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    lat DOUBLE PRECISION,
+    lng DOUBLE PRECISION,
+    address_text TEXT,
+    observed_at VARCHAR(20) NOT NULL,
+    photo_url TEXT,
+    notes TEXT,
+    ignore_in_stats BOOLEAN DEFAULT FALSE,
+    share_to_community BOOLEAN DEFAULT FALSE,
+    transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+    pantry_item_id INTEGER REFERENCES pantry_items(id) ON DELETE SET NULL,
+    expiry_date VARCHAR(20),
+    expiry_is_estimated BOOLEAN DEFAULT FALSE,
+    storage_type VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS price_settings (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    threshold_mode VARCHAR(30) DEFAULT 'percent',
+    threshold_cheap_pct DOUBLE PRECISION DEFAULT 10.0,
+    threshold_expensive_pct DOUBLE PRECISION DEFAULT 15.0,
+    period_days INTEGER DEFAULT 60,
+    default_source VARCHAR(30) DEFAULT 'combined',
+    share_all_entries BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_products_user ON price_products(user_id, name_normalized);
+CREATE INDEX IF NOT EXISTS idx_price_entries_product ON price_entries(product_id, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_price_entries_user ON price_entries(user_id, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stores_user ON stores(user_id, name);
+
+-- =============================================================================
 -- INITIAL SEED: SYSTEM ROLES (Hanya Metadata Role, Tanpa Data Dummy Pengguna)
 -- =============================================================================
 INSERT INTO roles (name, description) VALUES
@@ -207,3 +294,4 @@ INSERT INTO roles (name, description) VALUES
     ('finance', 'Finance Manager with access to cashflow and ledger operations'),
     ('user', 'Standard User with personal life OS access')
 ON CONFLICT (name) DO NOTHING;
+

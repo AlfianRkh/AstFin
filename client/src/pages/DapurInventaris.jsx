@@ -3,7 +3,9 @@ import { api } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import { CheckoutShoppingModal } from "../components/modals/CheckoutShoppingModal";
 import { RestockProductModal } from "../components/modals/RestockProductModal";
+import { FruitExpiryCalculatorModal } from "../components/modals/FruitExpiryCalculatorModal";
 import { parsePackageInfo } from "../utils/packageHelper";
+import { detectFruit } from "../utils/fruitExpiryHelper";
 
 export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
   const [items, setItems] = useState([]);
@@ -14,6 +16,8 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
   const [modalCheckout, setModalCheckout] = useState(false);
   const [selectedRestockItem, setSelectedRestockItem] = useState(null);
   const [modalRestock, setModalRestock] = useState(false);
+  const [modalFruitGuide, setModalFruitGuide] = useState(false);
+  const [selectedFruitItem, setSelectedFruitItem] = useState(null);
   const [newShoppingName, setNewShoppingName] = useState("");
   const [newShoppingPrice, setNewShoppingPrice] = useState("");
 
@@ -142,6 +146,17 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
             </div>
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <button
+                onClick={() => {
+                  setSelectedFruitItem(null);
+                  setModalFruitGuide(true);
+                }}
+                className="bg-surface-container-high hover:bg-surface-bright text-primary text-xs font-bold px-3.5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all border border-primary/30 shadow-sm hover:border-primary/60 active:scale-95"
+                title="Kalkulator batas masa simpan & panduan buah segar tanpa tanggal kedaluwarsa"
+              >
+                <span className="text-base">🍎</span>
+                <span>Kalkulator Exp Buah</span>
+              </button>
+              <button
                 onClick={onOpenScan}
                 className="bg-primary-container text-on-primary-container text-xs font-bold px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-primary transition-all shadow-[0_0_16px_rgba(16,185,129,0.3)]"
               >
@@ -237,41 +252,61 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
                 </div>
 
                 <div className="grid grid-cols-1 gap-space-sm">
-                  {criticalItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="bg-surface-container-low rounded-xl p-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md relative overflow-hidden border border-outline-variant/15"
-                    >
-                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-error"></div>
-                      <div className="flex items-start sm:items-center gap-space-md min-w-0 pl-1">
-                        <div className="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center text-error shrink-0">
-                          <span className="material-symbols-outlined text-[24px]">emergency_heat</span>
+                  {criticalItems.map((item) => {
+                    const fruitMatch = detectFruit(item.name);
+                    return (
+                      <div
+                        key={item.id}
+                        className="bg-surface-container-low rounded-xl p-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md relative overflow-hidden border border-outline-variant/15"
+                      >
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-error"></div>
+                        <div className="flex items-start sm:items-center gap-space-md min-w-0 pl-1">
+                          <div className="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center text-error shrink-0">
+                            {fruitMatch ? (
+                              <span className="text-2xl">{fruitMatch.icon}</span>
+                            ) : (
+                              <span className="material-symbols-outlined text-[24px]">emergency_heat</span>
+                            )}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold text-on-surface truncate">{item.name}</span>
+                              <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[10px] font-bold">
+                                EXP: {item.expiry_date}
+                              </span>
+                              {fruitMatch && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedFruitItem(item);
+                                    setModalFruitGuide(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all"
+                                  title="Cek tanda kebusukan & tips simpan"
+                                >
+                                  <span>Cek Panduan Segar</span>
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-outline text-xs mt-1">
+                              <span className="text-secondary font-medium">{item.category}</span>
+                              <span>•</span>
+                              <span>Sisa: <strong className="text-on-surface">{item.quantity} {item.unit}</strong></span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-on-surface truncate">{item.name}</span>
-                            <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[10px] font-bold">
-                              EXP: {item.expiry_date}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 text-outline text-xs mt-1">
-                            <span className="text-secondary font-medium">{item.category}</span>
-                            <span>•</span>
-                            <span>Sisa: <strong className="text-on-surface">{item.quantity} {item.unit}</strong></span>
-                          </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => handleConsumeAll(item)}
+                            className="bg-primary-container text-on-primary-container hover:bg-primary text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                            <span>Pakai 100%</span>
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={() => handleConsumeAll(item)}
-                          className="bg-primary-container text-on-primary-container hover:bg-primary text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                          <span>Pakai 100%</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}
@@ -299,6 +334,7 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
                   {items.map((item) => {
                     const isMenipis = item.quantity <= item.min_quantity;
                     const isOutOfStock = item.quantity <= 0;
+                    const fruitMatch = detectFruit(item.name);
 
                     return (
                       <div
@@ -310,9 +346,13 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
                           <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
                             isOutOfStock ? "bg-error/15 text-error" : isMenipis ? "bg-amber-400/15 text-amber-400" : "bg-surface-container text-primary"
                           }`}>
-                            <span className="material-symbols-outlined text-[24px]">
-                              {item.category === "Freezer" ? "severe_cold" : item.category === "Lemari Kering" ? "inventory" : "kitchen"}
-                            </span>
+                            {fruitMatch ? (
+                              <span className="text-2xl">{fruitMatch.icon}</span>
+                            ) : (
+                              <span className="material-symbols-outlined text-[24px]">
+                                {item.category === "Freezer" ? "severe_cold" : item.category === "Lemari Kering" ? "inventory" : "kitchen"}
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex flex-col min-w-0 flex-1">
@@ -351,6 +391,21 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
                                 <span className="bg-surface-container px-2 py-0.5 rounded-md text-secondary font-medium">
                                   {formatRupiah(item.price)}
                                 </span>
+                              )}
+                              {fruitMatch && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedFruitItem(item);
+                                    setModalFruitGuide(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all active:scale-95 shadow-sm"
+                                  title="Lihat kalkulator masa simpan, tips & tanda pembusukan buah"
+                                >
+                                  <span className="material-symbols-outlined text-[13px]">eco</span>
+                                  <span>Panduan Segar</span>
+                                </button>
                               )}
                             </div>
                           </div>
@@ -542,6 +597,20 @@ export function DapurInventaris({ onOpenAddPantry, onOpenScan }) {
         }}
         item={selectedRestockItem}
         onSuccess={loadPantryData}
+      />
+
+      {/* Modal Panduan & Kalkulator Masa Simpan Buah Segar */}
+      <FruitExpiryCalculatorModal
+        isOpen={modalFruitGuide}
+        onClose={() => {
+          setModalFruitGuide(false);
+          setSelectedFruitItem(null);
+        }}
+        initialFruitName={selectedFruitItem ? selectedFruitItem.name : ""}
+        initialStorageZone={selectedFruitItem ? selectedFruitItem.category : "Kulkas (Chiller)"}
+        onAddToPantry={(itemData) => {
+          onOpenAddPantry?.(itemData);
+        }}
       />
     </div>
   );

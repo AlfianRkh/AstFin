@@ -12,7 +12,9 @@ import { Dashboard } from "./pages/Dashboard";
 import { FinansialKas } from "./pages/FinansialKas";
 import { PengadaanRadar } from "./pages/PengadaanRadar";
 import { DapurInventaris } from "./pages/DapurInventaris";
+import { CompareHarga } from "./pages/CompareHarga";
 import { UserManagement } from "./pages/UserManagement";
+import { VerifyEmail } from "./pages/VerifyEmail";
 
 // Modals
 import { ScanReceiptModal } from "./components/modals/ScanReceiptModal";
@@ -59,10 +61,16 @@ function MainLayout() {
   };
 
   const [initialRadarData, setInitialRadarData] = useState(null);
+  const [initialPantryData, setInitialPantryData] = useState(null);
 
   const handleOpenRadar = (initialData = null) => {
     setInitialRadarData(initialData);
     setModalRadar(true);
+  };
+
+  const handleOpenPantry = (initialData = null) => {
+    setInitialPantryData(initialData);
+    setModalPantry(true);
   };
 
   const handleOpenPayment = (debt) => {
@@ -125,10 +133,14 @@ function MainLayout() {
               element={
                 <DapurInventaris
                   key={refreshKey}
-                  onOpenAddPantry={() => setModalPantry(true)}
+                  onOpenAddPantry={handleOpenPantry}
                   onOpenScan={() => setModalScan(true)}
                 />
               }
+            />
+            <Route
+              path="/compare-harga"
+              element={<CompareHarga key={refreshKey} />}
             />
             <Route
               path="/ai-insights"
@@ -222,7 +234,11 @@ function MainLayout() {
       />
       <AddPantryModal
         isOpen={modalPantry}
-        onClose={() => setModalPantry(false)}
+        initialData={initialPantryData}
+        onClose={() => {
+          setModalPantry(false);
+          setInitialPantryData(null);
+        }}
         onSuccess={triggerRefresh}
       />
       <AddEnvelopeModal
@@ -240,6 +256,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route
             path="/*"
             element={

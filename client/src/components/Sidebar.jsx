@@ -31,6 +31,7 @@ export function Sidebar({ isOpen = false, onClose = () => {} }) {
     { path: "/finansial-kas", label: "Finansial & Kas", icon: "account_balance_wallet" },
     { path: "/pengadaan-radar", label: "Pengadaan & Radar", icon: "radar" },
     { path: "/dapur-inventaris", label: "Dapur & Inventaris", icon: "kitchen" },
+    { path: "/compare-harga", label: "Compare Harga", icon: "price_change" },
   ];
 
   const intelItems = [

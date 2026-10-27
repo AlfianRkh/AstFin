@@ -8,8 +8,8 @@ export function BottomNav({ onScanClick }) {
   const navItems = [
     { path: "/", label: "Dashboard", icon: "grid_view" },
     { path: "/finansial-kas", label: "Finansial", icon: "account_balance_wallet" },
-    { path: "/pengadaan-radar", label: "Radar", icon: "radar" },
     { path: "/dapur-inventaris", label: "Dapur", icon: "kitchen" },
+    { path: "/compare-harga", label: "Compare", icon: "price_change" },
   ];
 
   return (

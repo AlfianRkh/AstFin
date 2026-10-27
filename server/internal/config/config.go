@@ -22,6 +22,11 @@ type Config struct {
 	JWTSecret    string
 	JWTExpiresIn int // in hours
 	CORSOrigin   string
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
 }
 
 func Load() *Config {
@@ -96,6 +101,22 @@ func Load() *Config {
 		corsOrigin = "*"
 	}
 
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_PORT")
+	if smtpPort == "" {
+		smtpPort = "587"
+	}
+	smtpUser := os.Getenv("SMTP_USER")
+	smtpPassword := os.Getenv("SMTP_PASSWORD")
+	smtpFrom := os.Getenv("SMTP_FROM")
+	if smtpFrom == "" {
+		if smtpUser != "" {
+			smtpFrom = smtpUser
+		} else {
+			smtpFrom = "OmniLife Nexus <no-reply@astfin.local>"
+		}
+	}
+
 	return &Config{
 		Port:         port,
 		DBDriver:     dbDriver,
@@ -110,5 +131,10 @@ func Load() *Config {
 		JWTSecret:    jwtSecret,
 		JWTExpiresIn: jwtExpiresIn,
 		CORSOrigin:   corsOrigin,
+		SMTPHost:     smtpHost,
+		SMTPPort:     smtpPort,
+		SMTPUser:     smtpUser,
+		SMTPPassword: smtpPassword,
+		SMTPFrom:     smtpFrom,
 	}
 }

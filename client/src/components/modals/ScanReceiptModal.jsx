@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../api/client";
+import { detectFruit, calculateFruitExpiry } from "../../utils/fruitExpiryHelper";
 
 export function ScanReceiptModal({ isOpen, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
@@ -61,13 +62,26 @@ export function ScanReceiptModal({ isOpen, onClose, onSuccess }) {
       if (autoRestock && ocrResult?.extracted_items) {
         for (const item of ocrResult.extracted_items) {
           try {
+            let finalExpiry = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+            const fruit = detectFruit(item.name);
+            if (fruit) {
+              const calc = calculateFruitExpiry({
+                fruitId: fruit.id,
+                storageType: (item.category || "Kulkas").toLowerCase().includes("freezer") ? "freezer" : "chiller",
+                condition: "ripe",
+              });
+              if (calc?.expiryDate) {
+                finalExpiry = calc.expiryDate;
+              }
+            }
+
             await api.createPantryItem({
               name: item.name,
               category: item.category || "Kulkas",
               quantity: item.qty || 1,
               unit: "Item",
               min_quantity: 1,
-              expiry_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+              expiry_date: finalExpiry,
             });
           } catch (e) {
             // Ignore duplicate item errors

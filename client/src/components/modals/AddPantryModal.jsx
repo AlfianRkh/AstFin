@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../api/client";
+import { FruitExpiryCalculatorModal } from "./FruitExpiryCalculatorModal";
+import { detectFruit } from "../../utils/fruitExpiryHelper";
 
 const PACKAGE_UNITS = ["kardus", "dus", "karton", "pack", "kotak", "bungkus", "pouch", "lusin", "renceng", "tray"];
 
-export function AddPantryModal({ isOpen, onClose, onSuccess }) {
+export function AddPantryModal({ isOpen, onClose, onSuccess, initialData = null }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Kulkas (Chiller)");
   const [storageZones, setStorageZones] = useState([]);
@@ -11,6 +13,7 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
   const [isAddingZone, setIsAddingZone] = useState(false);
   const [newZoneName, setNewZoneName] = useState("");
   const [savingZone, setSavingZone] = useState(false);
+  const [showFruitModal, setShowFruitModal] = useState(false);
 
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("Pcs");
@@ -27,6 +30,23 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
 
   useEffect(() => {
     if (isOpen) {
+      if (initialData) {
+        setName(initialData.name || "");
+        if (initialData.category) setCategory(initialData.category);
+        if (initialData.quantity !== undefined) setQuantity(String(initialData.quantity));
+        if (initialData.unit) setUnit(initialData.unit);
+        if (initialData.min_quantity !== undefined) setMinQuantity(String(initialData.min_quantity));
+        if (initialData.expiry_date) setExpiryDate(initialData.expiry_date);
+        if (initialData.price !== undefined) setPrice(String(initialData.price));
+      } else {
+        setName("");
+        setQuantity("");
+        setPrice("");
+        const d = new Date();
+        d.setDate(d.getDate() + 7);
+        setExpiryDate(d.toISOString().split("T")[0]);
+      }
+
       setLoadingZones(true);
       api.getPantryStorageZones()
         .then((res) => {
@@ -34,6 +54,10 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
           setStorageZones(list);
           if (list.length > 0) {
             setCategory((prev) => {
+              if (initialData?.category) {
+                const matched = list.some((z) => z.name === initialData.category);
+                if (matched) return initialData.category;
+              }
               const found = list.some((z) => z.name === prev);
               return found ? prev : list[0].name;
             });
@@ -49,8 +73,9 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
       setIsAddingZone(false);
       setNewZoneName("");
       setPcsPerUnit("");
+      setShowFruitModal(false);
     }
-  }, [isOpen]);
+  }, [isOpen, initialData]);
 
   if (!isOpen) return null;
 
@@ -170,15 +195,48 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 text-xs">
           <div>
-            <label className="block text-[11px] font-bold text-outline uppercase mb-1">Nama Bahan / Komoditas</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[11px] font-bold text-outline uppercase">Nama Bahan / Komoditas</label>
+              <button
+                type="button"
+                onClick={() => setShowFruitModal(true)}
+                className="text-[10px] text-primary hover:underline font-bold flex items-center gap-1"
+                title="Buka panduan & kalkulator batas kedaluwarsa buah segar"
+              >
+                <span>🍎 Panduan Buah</span>
+              </button>
+            </div>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Contoh: Telur Ayam Negeri, Mie Instan Goreng, Susu UHT 1L"
+              placeholder="Contoh: Pisang Cavendish, Apel Fuji, Alpukat, Telur Ayam..."
               className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary"
             />
+            {detectFruit(name) && (
+              <div className="mt-1.5 px-3 py-2 rounded-xl bg-primary-container/15 border border-primary/30 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xl">{detectFruit(name).icon}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] font-bold text-on-surface truncate">
+                      Terdeteksi: {detectFruit(name).name} ({detectFruit(name).category})
+                    </span>
+                    <span className="text-[10px] text-primary truncate">
+                      Bahan segar tanpa label exp · Hitung perkiraan batas aman konsumsi
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFruitModal(true)}
+                  className="bg-primary hover:bg-primary-container text-on-primary text-[10px] font-bold px-2.5 py-1.5 rounded-lg shrink-0 flex items-center gap-1 shadow-sm transition-all"
+                >
+                  <span className="material-symbols-outlined text-[13px]">calculate</span>
+                  <span>Hitung Exp</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Zona Penyimpanan & Satuan - Grid Sejajar Row-by-Row */}
@@ -413,10 +471,18 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
                 Harga Awal <span className="text-[10px] text-outline font-normal">(Opsional)</span>
               </label>
             </div>
-            <div className="min-h-[28px] flex items-end">
+            <div className="min-h-[28px] flex items-end justify-between">
               <label className="text-[11px] font-bold text-outline uppercase leading-tight truncate">
                 Tgl Kedaluwarsa *
               </label>
+              <button
+                type="button"
+                onClick={() => setShowFruitModal(true)}
+                className="text-[10px] text-primary hover:underline font-bold flex items-center gap-0.5 shrink-0"
+                title="Kalkulator batas masa simpan buah & bahan segar tanpa label exp date"
+              >
+                <span>🍎 Estimasi Buah</span>
+              </button>
             </div>
 
             <div>
@@ -461,6 +527,27 @@ export function AddPantryModal({ isOpen, onClose, onSuccess }) {
             </button>
           </div>
         </form>
+
+        {/* Modal Kalkulator Kedaluwarsa Buah Segar */}
+        <FruitExpiryCalculatorModal
+          isOpen={showFruitModal}
+          onClose={() => setShowFruitModal(false)}
+          initialFruitName={name}
+          initialStorageZone={category}
+          onApplyExpiry={(res) => {
+            if (res?.expiryDate) {
+              setExpiryDate(res.expiryDate);
+            }
+            if (res?.recommendedCategory) {
+              const matchZone = storageZones.find(
+                (z) => z.name.toLowerCase().includes(res.recommendedCategory.toLowerCase().slice(0, 5))
+              );
+              if (matchZone) {
+                setCategory(matchZone.name);
+              }
+            }
+          }}
+        />
       </div>
     </div>
   );

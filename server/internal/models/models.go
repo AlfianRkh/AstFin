@@ -17,6 +17,7 @@ type User struct {
 	FullName     string    `json:"full_name"`
 	RoleID       int       `json:"role_id"`
 	RoleName     string    `json:"role_name"`
+	IsVerified   bool      `json:"is_verified"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -32,6 +33,15 @@ type RegisterRequest struct {
 type LoginRequest struct {
 	UsernameOrEmail string `json:"username_or_email"`
 	Password        string `json:"password"`
+}
+
+type VerifyEmailRequest struct {
+	Email string `json:"email"`
+	Code  string `json:"code"`
+}
+
+type ResendVerificationRequest struct {
+	Email string `json:"email"`
 }
 
 type AuthResponse struct {
@@ -227,3 +237,129 @@ type DashboardSummary struct {
 	UrgentAlerts       []UrgentAlert          `json:"urgent_alerts"`
 	CashflowTrend      []MonthlyCashflowPoint `json:"cashflow_trend"`
 }
+
+// ==========================================
+// Compare Price Product Models
+// ==========================================
+
+type Store struct {
+	ID            int       `json:"id"`
+	UserID        int       `json:"user_id"`
+	Name          string    `json:"name"`
+	StoreType     string    `json:"store_type"` // minimarket, supermarket, pasar, tukang_sayur, grosir, online
+	AddressText   string    `json:"address_text,omitempty"`
+	Lat           *float64  `json:"lat,omitempty"`
+	Lng           *float64  `json:"lng,omitempty"`
+	IsMobile      bool      `json:"is_mobile"`
+	PublicStoreID *int      `json:"public_store_id,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type ProductCategory struct {
+	ID                    int       `json:"id"`
+	UserID                *int      `json:"user_id,omitempty"`
+	Name                  string    `json:"name"`
+	GroupCode             string    `json:"group_code"`
+	ShelfLifeRoomDays     *int      `json:"shelf_life_room_days,omitempty"`
+	ShelfLifeChillerDays  *int      `json:"shelf_life_chiller_days,omitempty"`
+	ShelfLifeFreezerDays  *int      `json:"shelf_life_freezer_days,omitempty"`
+	ThresholdCheapPct     *float64  `json:"threshold_cheap_pct,omitempty"`
+	ThresholdExpensivePct *float64  `json:"threshold_expensive_pct,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
+}
+
+type PriceProduct struct {
+	ID                 int          `json:"id"`
+	UserID             int          `json:"user_id"`
+	CategoryID         *int         `json:"category_id,omitempty"`
+	CategoryName       string       `json:"category_name,omitempty"`
+	CanonicalProductID *int         `json:"canonical_product_id,omitempty"`
+	Name               string       `json:"name"`
+	NameNormalized     string       `json:"name_normalized"`
+	BaseUnit           string       `json:"base_unit"` // pcs, kg, liter, gram
+	LastPricePerUnit   float64      `json:"last_price_per_unit,omitempty"`
+	MinPricePerUnit    float64      `json:"min_price_per_unit,omitempty"`
+	MaxPricePerUnit    float64      `json:"max_price_per_unit,omitempty"`
+	AvgPricePerUnit    float64      `json:"avg_price_per_unit,omitempty"`
+	CheapestStoreName  string       `json:"cheapest_store_name,omitempty"`
+	EntriesCount       int          `json:"entries_count,omitempty"`
+	PriceTrend         string       `json:"price_trend,omitempty"` // up, down, flat
+	LastObservedAt     string       `json:"last_observed_at,omitempty"`
+	CreatedAt          time.Time    `json:"created_at"`
+	Entries            []PriceEntry `json:"entries"`
+}
+
+type PriceEntry struct {
+	ID                int       `json:"id"`
+	UserID            int       `json:"user_id"`
+	ProductID         int       `json:"product_id"`
+	ProductName       string    `json:"product_name,omitempty"`
+	StoreID           *int      `json:"store_id,omitempty"`
+	StoreName         string    `json:"store_name,omitempty"`
+	StoreType         string    `json:"store_type,omitempty"`
+	EntryType         string    `json:"entry_type"` // observation, purchase
+	PurchaseUnit      string    `json:"purchase_unit"`
+	PurchaseQty       float64   `json:"purchase_qty"`
+	UnitsPerPackage   *float64  `json:"units_per_package,omitempty"`
+	TotalUnits        float64   `json:"total_units"`
+	PriceTotal        float64   `json:"price_total"`
+	DiscountType      string    `json:"discount_type,omitempty"` // amount, percent
+	DiscountValue     float64   `json:"discount_value"`
+	DiscountAmount    float64   `json:"discount_amount"`
+	PriceFinal        float64   `json:"price_final"`
+	PricePerUnit      float64   `json:"price_per_unit"`
+	Lat               *float64  `json:"lat,omitempty"`
+	Lng               *float64  `json:"lng,omitempty"`
+	AddressText       string    `json:"address_text,omitempty"`
+	ObservedAt        string    `json:"observed_at"` // YYYY-MM-DD
+	PhotoURL          string    `json:"photo_url,omitempty"`
+	Notes             string    `json:"notes,omitempty"`
+	IgnoreInStats     bool      `json:"ignore_in_stats"`
+	ShareToCommunity  bool      `json:"share_to_community"`
+	TransactionID     *int      `json:"transaction_id,omitempty"`
+	PantryItemID      *int      `json:"pantry_item_id,omitempty"`
+	ExpiryDate        string    `json:"expiry_date,omitempty"`
+	ExpiryIsEstimated bool      `json:"expiry_is_estimated"`
+	StorageType       string    `json:"storage_type,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+type PriceSettings struct {
+	UserID                int     `json:"user_id"`
+	ThresholdMode         string  `json:"threshold_mode"` // percent, percentile
+	ThresholdCheapPct     float64 `json:"threshold_cheap_pct"`
+	ThresholdExpensivePct float64 `json:"threshold_expensive_pct"`
+	PeriodDays            int     `json:"period_days"`
+	DefaultSource         string  `json:"default_source"` // personal, community, combined
+	ShareAllEntries       bool    `json:"share_all_entries"`
+}
+
+type PriceCheckRequest struct {
+	ProductName     string   `json:"product_name"`
+	PurchaseUnit    string   `json:"purchase_unit"`
+	PurchaseQty     float64  `json:"purchase_qty"`
+	UnitsPerPackage *float64 `json:"units_per_package,omitempty"`
+	PriceTotal      float64  `json:"price_total"`
+	DiscountType    string   `json:"discount_type,omitempty"`
+	DiscountValue   float64  `json:"discount_value"`
+	StoreID         *int     `json:"store_id,omitempty"`
+}
+
+type PriceCheckResult struct {
+	NormalizedPricePerUnit float64      `json:"normalized_price_per_unit"`
+	BaseUnit               string       `json:"base_unit"`
+	Verdict                string       `json:"verdict"`       // cheap, fair, expensive, not_enough_data
+	VerdictLabel           string       `json:"verdict_label"` // Murah, Wajar, Mahal, Data Belum Cukup
+	ThresholdUsedPct       float64      `json:"threshold_used_pct"`
+	DiffPercentage         float64      `json:"diff_percentage"`
+	MedianPrice            float64      `json:"median_price"`
+	AvgPrice               float64      `json:"avg_price"`
+	MinPrice               float64      `json:"min_price"`
+	MaxPrice               float64      `json:"max_price"`
+	CheapestStoreName      string       `json:"cheapest_store_name,omitempty"`
+	CheapestDate           string       `json:"cheapest_date,omitempty"`
+	EntriesAnalyzedCount   int          `json:"entries_analyzed_count"`
+	Recommendation         string       `json:"recommendation,omitempty"`
+	RecentHistory          []PriceEntry `json:"recent_history,omitempty"`
+}
+

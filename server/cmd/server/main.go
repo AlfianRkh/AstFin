@@ -39,6 +39,7 @@ func main() {
 	radarH := handlers.NewRadarHandler(db)
 	pantryH := handlers.NewPantryHandler(db)
 	dashH := handlers.NewDashboardHandler(db)
+	priceH := handlers.NewPriceHandler(db)
 
 	r := chi.NewRouter()
 
@@ -81,6 +82,8 @@ func main() {
 		api.Post("/auth/register", authH.Register)
 		api.Post("/auth/login", authH.Login)
 		api.Get("/auth/roles", authH.GetRoles)
+		api.Post("/auth/verify-email", authH.VerifyEmail)
+		api.Post("/auth/resend-verification", authH.ResendVerificationCode)
 
 		// Protected Routes
 		api.Group(func(p chi.Router) {
@@ -149,11 +152,35 @@ func main() {
 			p.Put("/shopping/{id}/toggle", pantryH.ToggleShoppingItem)
 			p.Delete("/shopping/{id}", pantryH.DeleteShoppingItem)
 
+			// Compare Price Product & Crowdsourced Observation
+			p.Get("/price/stores", priceH.GetStores)
+			p.Post("/price/stores", priceH.CreateStore)
+			p.Put("/price/stores/{id}", priceH.UpdateStore)
+			p.Delete("/price/stores/{id}", priceH.DeleteStore)
+
+			p.Get("/price/categories", priceH.GetProductCategories)
+			p.Get("/price/products", priceH.GetPriceProducts)
+			p.Post("/price/products", priceH.CreatePriceProduct)
+			p.Get("/price/products/{id}", priceH.GetPriceProductDetail)
+			p.Delete("/price/products/{id}", priceH.DeletePriceProduct)
+			p.Post("/price/products/{id}/entries", priceH.AddPriceEntry)
+			p.Delete("/price/entries/{id}", priceH.DeletePriceEntry)
+
+			p.Post("/price/check", priceH.PriceCheck)
+			p.Get("/price/settings", priceH.GetPriceSettings)
+			p.Post("/price/settings", priceH.UpdatePriceSettings)
+
+			// Geocoding Proxy (OpenStreetMap Nominatim with Rate-Limiting & In-Memory Cache)
+			p.Get("/geo/search", priceH.SearchGeo)
+			p.Get("/geo/reverse", priceH.ReverseGeo)
+
 			// Admin Only: User & Role Management
 			p.Group(func(admin chi.Router) {
 				admin.Use(middleware.RequireRole("admin"))
 				admin.Get("/admin/users", authH.GetUsers)
+				admin.Post("/admin/users", authH.CreateUserByAdmin)
 				admin.Put("/admin/users/{id}/role", authH.UpdateUserRole)
+				admin.Delete("/admin/users/{id}", authH.DeleteUserByAdmin)
 			})
 		})
 	})

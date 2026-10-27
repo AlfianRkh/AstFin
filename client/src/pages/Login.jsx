@@ -1,42 +1,72 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export function Login() {
+  const [searchParams] = useSearchParams();
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
-  const [roleName, setRoleName] = useState("user");
   const [error, setError] = useState("");
+  const [unverifiedEmail, setUnverifiedEmail] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
+  // Check if returning from successful email verification
+  useEffect(() => {
+    if (searchParams.get("verified") === "true") {
+      const verifiedEmail = searchParams.get("email") || "";
+      if (verifiedEmail) {
+        setUsername(verifiedEmail);
+      }
+      setSuccessMessage("Selamat! Akun Anda telah berhasil diaktivasi. Silakan masuk dengan email dan kata sandi Anda.");
+    }
+  }, [searchParams]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setUnverifiedEmail("");
+    setSuccessMessage("");
     setLoading(true);
 
     try {
       if (isRegister) {
-        await register({
+        const registeredEmail = email.trim();
+        const res = await register({
           username: username.trim(),
-          email: email.trim(),
+          email: registeredEmail,
           password,
           full_name: fullName.trim() || username.trim(),
-          role_name: roleName,
+          role_name: "user",
         });
+
+        // Jika akun superuser admin pertama dibuat, langsung ke dashboard
+        if (res?.user && !res?.requires_verification) {
+          navigate("/");
+          return;
+        }
+
+        // Arahkan ke halaman verifikasi email dengan OTP 20 menit
+        const devCode = res?.dev_code || "";
+        navigate(`/verify-email?email=${encodeURIComponent(registeredEmail)}${devCode ? `&dev_code=${devCode}` : ""}`);
       } else {
         await login({
           username_or_email: username.trim(),
           password,
         });
+        navigate("/");
       }
-      navigate("/");
     } catch (err) {
+      if (err.requires_verification || (err.message && err.message.toLowerCase().includes("belum aktif"))) {
+        const targetEmail = err.email || (username.includes("@") ? username.trim() : "");
+        setUnverifiedEmail(targetEmail);
+      }
       setError(err.message || "Autentikasi gagal. Silakan periksa kembali data Anda.");
     } finally {
       setLoading(false);
@@ -60,10 +90,28 @@ export function Login() {
           </p>
         </div>
 
+        {successMessage && (
+          <div className="bg-primary/15 border border-primary/40 text-primary rounded-xl p-3 text-xs flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+            <span>{successMessage}</span>
+          </div>
+        )}
+
         {error && (
-          <div className="bg-error-container/30 border border-error/40 text-error rounded-xl p-3 text-xs flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px]">error</span>
-            <span>{error}</span>
+          <div className="bg-error-container/30 border border-error/40 text-error rounded-xl p-3 text-xs flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">error</span>
+              <span>{error}</span>
+            </div>
+            {unverifiedEmail && (
+              <Link
+                to={`/verify-email?email=${encodeURIComponent(unverifiedEmail)}`}
+                className="self-end text-primary font-bold hover:underline inline-flex items-center gap-1 text-[11px] mt-0.5"
+              >
+                <span>Aktivasi / Verifikasi Sekarang</span>
+                <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
+              </Link>
+            )}
           </div>
         )}
 
@@ -123,22 +171,6 @@ export function Login() {
             />
           </div>
 
-          {isRegister && (
-            <div>
-              <label className="block text-[11px] font-bold text-outline uppercase mb-1">Peran / Role Pengguna</label>
-              <select
-                value={roleName}
-                onChange={(e) => setRoleName(e.target.value)}
-                className="w-full bg-surface-container rounded-lg px-3 py-2 text-on-surface border border-outline-variant/30 focus:outline-none text-xs"
-              >
-                <option value="admin">Administrator (Full Control & User Management)</option>
-                <option value="finance">Finance Manager (Kas & Ledger Khusus)</option>
-                <option value="user">User Biasa (Personal Life OS)</option>
-              </select>
-              <p className="text-[10px] text-outline mt-1">*Pengguna pertama otomatis terdaftar sebagai Administrator.</p>
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={loading}
@@ -154,6 +186,7 @@ export function Login() {
             onClick={() => {
               setIsRegister(!isRegister);
               setError("");
+              setSuccessMessage("");
             }}
             className="text-primary font-bold ml-1.5 hover:underline"
           >
