@@ -1,0 +1,13 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Go build outputs
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+server
