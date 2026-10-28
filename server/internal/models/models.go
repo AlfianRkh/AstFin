@@ -53,6 +53,8 @@ type AuthResponse struct {
 type Wallet struct {
 	ID            int       `json:"id"`
 	UserID        int       `json:"user_id"`
+	UserName      string    `json:"user_name,omitempty"`
+	UserFullName  string    `json:"user_full_name,omitempty"`
 	Name          string    `json:"name"`
 	Type          string    `json:"type"` // Bank, E-Wallet, Cash, Credit Card
 	Balance       float64   `json:"balance"` // Saldo aktif / Sisa limit kartu kredit
@@ -65,6 +67,8 @@ type Wallet struct {
 type Transaction struct {
 	ID              int       `json:"id"`
 	UserID          int       `json:"user_id"`
+	UserName        string    `json:"user_name,omitempty"`
+	UserFullName    string    `json:"user_full_name,omitempty"`
 	WalletID        int       `json:"wallet_id"`
 	WalletName      string    `json:"wallet_name,omitempty"`
 	Type            string    `json:"type"` // income, expense
@@ -76,7 +80,25 @@ type Transaction struct {
 	OCRAccuracy     float64   `json:"ocr_accuracy,omitempty"`
 	TransactionDate string    `json:"transaction_date"`
 	DueDate         string    `json:"due_date,omitempty"`
+	Deleted         int       `json:"deleted"`
 	CreatedAt       time.Time `json:"created_at"`
+}
+
+type AdminUserOverview struct {
+	UserID           int     `json:"user_id"`
+	Username         string  `json:"username"`
+	FullName         string  `json:"full_name"`
+	Email            string  `json:"email"`
+	RoleName         string  `json:"role_name"`
+	IsVerified       bool    `json:"is_verified"`
+	TotalWallets     int     `json:"total_wallets"`
+	TotalLiquidity   float64 `json:"total_liquidity"`
+	TotalExpense     float64 `json:"total_expense"`
+	TotalIncome      float64 `json:"total_income"`
+	TransactionCount int     `json:"transaction_count"`
+	DebtCount        int     `json:"debt_count"`
+	TotalDebt        float64 `json:"total_debt"`
+	CreatedAt        string  `json:"created_at"`
 }
 
 type TransactionCategory struct {
@@ -114,6 +136,8 @@ type BudgetEnvelope struct {
 type Debt struct {
 	ID           int       `json:"id"`
 	UserID       int       `json:"user_id"`
+	UserName     string    `json:"user_name,omitempty"`
+	UserFullName string    `json:"user_full_name,omitempty"`
 	WalletID     *int      `json:"wallet_id,omitempty"`
 	WalletName   string    `json:"wallet_name,omitempty"`
 	ContactName  string    `json:"contact_name"`

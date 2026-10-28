@@ -25,7 +25,10 @@ func NewTransactionHandler(db *database.DB) *TransactionHandler {
 }
 
 func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
+	callerRole := strings.ToLower(middleware.GetUserRole(r))
+	callerUserID := middleware.GetUserID(r)
+	isFinance := callerRole == "finance" || callerRole == "admin"
+
 	limitStr := r.URL.Query().Get("limit")
 	limit := 50
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
@@ -40,16 +43,32 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 
 	filterType := r.URL.Query().Get("type")
 	filterCategory := r.URL.Query().Get("category")
+	targetUserParam := r.URL.Query().Get("user_id")
 
 	query := `
-		SELECT t.id, t.user_id, t.wallet_id, COALESCE(w.name, 'Unknown') as wallet_name,
+		SELECT t.id, t.user_id, COALESCE(u.username, '') as user_name, COALESCE(u.full_name, '') as user_full_name,
+		       t.wallet_id, COALESCE(w.name, 'Unknown') as wallet_name,
 		       t.type, t.amount, t.category, t.merchant, t.notes, t.receipt_url,
-		       t.ocr_accuracy, t.transaction_date, COALESCE(t.due_date, ''), t.created_at
+		       t.ocr_accuracy, t.transaction_date, COALESCE(t.due_date, ''), t.deleted, t.created_at
 		FROM transactions t
 		LEFT JOIN wallets w ON t.wallet_id = w.id
-		WHERE t.user_id = ? AND t.deleted = 0
+		LEFT JOIN users u ON t.user_id = u.id
+		WHERE t.deleted = 0
 	`
-	args := []interface{}{userID}
+	args := []interface{}{}
+
+	if isFinance {
+		if targetUserParam != "" && targetUserParam != "all" {
+			if tUID, err := strconv.Atoi(targetUserParam); err == nil && tUID > 0 {
+				query += " AND t.user_id = ?"
+				args = append(args, tUID)
+			}
+		}
+	} else {
+		// Non-finance/admin restricted to own records
+		query += " AND t.user_id = ?"
+		args = append(args, callerUserID)
+	}
 
 	if filterType != "" {
 		query += " AND t.type = ?"
@@ -67,10 +86,11 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	// Hitung total data (untuk pagination) memakai filter yang sama
+	// Hitung total data untuk pagination memakai filter yang sama
 	totalCount := 0
 	if paged {
-		countQuery := "SELECT COUNT(*) FROM transactions t WHERE " + query[strings.Index(query, "WHERE t.user_id")+len("WHERE "):]
+		whereIdx := strings.Index(query, "WHERE ")
+		countQuery := "SELECT COUNT(*) FROM transactions t " + query[whereIdx:]
 		_ = h.db.QueryRow(countQuery, args...).Scan(&totalCount)
 	}
 
@@ -92,9 +112,9 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 		var notes sql.NullString
 
 		if err := rows.Scan(
-			&tr.ID, &tr.UserID, &tr.WalletID, &tr.WalletName, &tr.Type, &tr.Amount,
+			&tr.ID, &tr.UserID, &tr.UserName, &tr.UserFullName, &tr.WalletID, &tr.WalletName, &tr.Type, &tr.Amount,
 			&tr.Category, &tr.Merchant, &notes, &receiptURL, &ocrAcc,
-			&tr.TransactionDate, &tr.DueDate, &tr.CreatedAt,
+			&tr.TransactionDate, &tr.DueDate, &tr.Deleted, &tr.CreatedAt,
 		); err == nil {
 			if notes.Valid {
 				tr.Notes = notes.String
@@ -122,9 +142,14 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 	utils.JSON(w, http.StatusOK, transactions)
 }
 
+
 func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
+	callerRole := strings.ToLower(middleware.GetUserRole(r))
+	callerUserID := middleware.GetUserID(r)
+	isAdmin := callerRole == "admin"
+
 	var req struct {
+		TargetUserID            int      `json:"target_user_id,omitempty"`
 		WalletID                int      `json:"wallet_id"`
 		Type                    string   `json:"type"` // income, expense
 		Amount                  float64  `json:"amount"`
@@ -169,13 +194,29 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 	}
 	defer tx.Rollback()
 
-	// Verify wallet belongs to user and fetch type & limits
+	// Verify wallet belongs to target user and fetch type & limits
 	var wallet models.Wallet
-	err = tx.QueryRow("SELECT id, name, type, balance, COALESCE(credit_limit, 0.0) FROM wallets WHERE id = ? AND user_id = ?", req.WalletID, userID).
-		Scan(&wallet.ID, &wallet.Name, &wallet.Type, &wallet.Balance, &wallet.CreditLimit)
+	var walletOwnerID int
+	if isAdmin {
+		err = tx.QueryRow("SELECT id, user_id, name, type, balance, COALESCE(credit_limit, 0.0) FROM wallets WHERE id = ?", req.WalletID).
+			Scan(&wallet.ID, &walletOwnerID, &wallet.Name, &wallet.Type, &wallet.Balance, &wallet.CreditLimit)
+	} else {
+		err = tx.QueryRow("SELECT id, user_id, name, type, balance, COALESCE(credit_limit, 0.0) FROM wallets WHERE id = ? AND user_id = ?", req.WalletID, callerUserID).
+			Scan(&wallet.ID, &walletOwnerID, &wallet.Name, &wallet.Type, &wallet.Balance, &wallet.CreditLimit)
+	}
+
 	if err != nil {
-		utils.JSONError(w, http.StatusBadRequest, "Selected wallet not found or does not belong to user")
+		utils.JSONError(w, http.StatusBadRequest, "Selected wallet not found or does not belong to authorized user")
 		return
+	}
+
+	targetUserID := callerUserID
+	if isAdmin {
+		if req.TargetUserID > 0 {
+			targetUserID = req.TargetUserID
+		} else {
+			targetUserID = walletOwnerID
+		}
 	}
 
 	isCreditCard := wallet.Type == "Credit Card" || wallet.Type == "Kartu Kredit"
@@ -204,7 +245,7 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 				_, _ = tx.Insert(`
 					INSERT INTO debts (user_id, wallet_id, contact_name, contact_phone, type, total_amount, paid_amount, status, due_date, notes)
 					VALUES (?, ?, ?, '', 'hutang', ?, 0.0, 'pending', ?, ?)
-				`, userID, wallet.ID, wallet.Name, req.Amount, req.DueDate, "Tagihan transaksi kartu kredit: "+req.Category+" ("+req.Merchant+")")
+				`, targetUserID, wallet.ID, wallet.Name, req.Amount, req.DueDate, "Tagihan transaksi kartu kredit: "+req.Category+" ("+req.Merchant+")")
 			}
 		}
 		newBalance -= req.Amount
@@ -221,7 +262,7 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 	trID, err := tx.Insert(`
 		INSERT INTO transactions (user_id, wallet_id, type, amount, category, merchant, notes, transaction_date, due_date)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, userID, req.WalletID, req.Type, req.Amount, req.Category, req.Merchant, req.Notes, req.TransactionDate, req.DueDate)
+	`, targetUserID, req.WalletID, req.Type, req.Amount, req.Category, req.Merchant, req.Notes, req.TransactionDate, req.DueDate)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to insert transaction: "+err.Error())
 		return
@@ -238,7 +279,7 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 					ELSE notes 
 				END 
 				WHERE id = ? AND user_id = ?
-			`, cID, userID)
+			`, cID, targetUserID)
 		}
 	}
 
@@ -250,12 +291,12 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 				INSERT INTO transaction_categories (user_id, name, type)
 				VALUES (?, ?, ?)
 				ON CONFLICT (user_id, name, type) DO NOTHING
-			`, userID, cleanCat, req.Type)
+			`, targetUserID, cleanCat, req.Type)
 		} else {
 			_, _ = tx.Exec(`
 				INSERT OR IGNORE INTO transaction_categories (user_id, name, type)
 				VALUES (?, ?, ?)
-			`, userID, cleanCat, req.Type)
+			`, targetUserID, cleanCat, req.Type)
 		}
 	}
 
@@ -265,7 +306,7 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 			UPDATE budget_envelopes 
 			SET spent_amount = spent_amount + ? 
 			WHERE user_id = ? AND LOWER(name) LIKE ?
-		`, req.Amount, userID, "%"+strings.ToLower(req.Category)+"%")
+		`, req.Amount, targetUserID, "%"+strings.ToLower(req.Category)+"%")
 	}
 
 	// Commit
@@ -277,11 +318,104 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 	utils.JSONMessage(w, http.StatusCreated, "Transaksi berhasil dicatat dan saldo dompet telah diperbarui", map[string]interface{}{
 		"id":          trID,
 		"new_balance": newBalance,
+		"target_user": targetUserID,
+	})
+}
+
+func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
+	callerRole := strings.ToLower(middleware.GetUserRole(r))
+	callerUserID := middleware.GetUserID(r)
+	isAdmin := callerRole == "admin"
+
+	idStr := chi.URLParam(r, "id")
+	trID, err := strconv.Atoi(idStr)
+	if err != nil {
+		utils.JSONError(w, http.StatusBadRequest, "Invalid transaction ID")
+		return
+	}
+
+	var req struct {
+		Amount          float64 `json:"amount"`
+		Category        string  `json:"category"`
+		Merchant        string  `json:"merchant"`
+		Notes           string  `json:"notes"`
+		TransactionDate string  `json:"transaction_date"`
+		DueDate         string  `json:"due_date"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+	defer tx.Rollback()
+
+	var tr models.Transaction
+	err = tx.QueryRow("SELECT id, user_id, wallet_id, type, amount, category, transaction_date FROM transactions WHERE id = ? AND deleted = 0", trID).
+		Scan(&tr.ID, &tr.UserID, &tr.WalletID, &tr.Type, &tr.Amount, &tr.Category, &tr.TransactionDate)
+	if err != nil {
+		utils.JSONError(w, http.StatusNotFound, "Transaction not found")
+		return
+	}
+
+	// Administration has all CRUD access; regular user can only update their own
+	if !isAdmin && tr.UserID != callerUserID {
+		utils.JSONError(w, http.StatusForbidden, "Akses ditolak: Anda tidak memiliki wewenang untuk mengubah transaksi akun lain")
+		return
+	}
+
+	// Jika nominal berubah, selaraskan saldo dompet pemilik
+	if req.Amount > 0 && req.Amount != tr.Amount {
+		diff := req.Amount - tr.Amount
+		if tr.Type == "expense" {
+			_, err = tx.Exec("UPDATE wallets SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", diff, tr.WalletID)
+		} else {
+			_, err = tx.Exec("UPDATE wallets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", diff, tr.WalletID)
+		}
+		if err != nil {
+			utils.JSONError(w, http.StatusInternalServerError, "Gagal memperbarui saldo dompet saat penyesuaian nominal")
+			return
+		}
+	} else if req.Amount <= 0 {
+		req.Amount = tr.Amount
+	}
+
+	if req.Category == "" {
+		req.Category = tr.Category
+	}
+	if req.TransactionDate == "" {
+		req.TransactionDate = tr.TransactionDate
+	}
+
+	_, err = tx.Exec(`
+		UPDATE transactions
+		SET amount = ?, category = ?, merchant = ?, notes = ?, transaction_date = ?, due_date = ?
+		WHERE id = ?
+	`, req.Amount, req.Category, req.Merchant, req.Notes, req.TransactionDate, req.DueDate, trID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Gagal memperbarui data transaksi: "+err.Error())
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Failed to commit update")
+		return
+	}
+
+	utils.JSONMessage(w, http.StatusOK, "Transaksi berhasil diperbarui", map[string]interface{}{
+		"id": trID,
 	})
 }
 
 func (h *TransactionHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
+	callerRole := strings.ToLower(middleware.GetUserRole(r))
+	callerUserID := middleware.GetUserID(r)
+	isAdmin := callerRole == "admin"
+
 	idStr := chi.URLParam(r, "id")
 	trID, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -297,30 +431,36 @@ func (h *TransactionHandler) DeleteTransaction(w http.ResponseWriter, r *http.Re
 	defer tx.Rollback()
 
 	var tr models.Transaction
-	err = tx.QueryRow("SELECT id, wallet_id, type, amount, category FROM transactions WHERE id = ? AND user_id = ? AND deleted = 0", trID, userID).
-		Scan(&tr.ID, &tr.WalletID, &tr.Type, &tr.Amount, &tr.Category)
+	err = tx.QueryRow("SELECT id, user_id, wallet_id, type, amount, category FROM transactions WHERE id = ? AND deleted = 0", trID).
+		Scan(&tr.ID, &tr.UserID, &tr.WalletID, &tr.Type, &tr.Amount, &tr.Category)
 	if err != nil {
 		utils.JSONError(w, http.StatusNotFound, "Transaction not found")
 		return
 	}
 
-	// Pulihkan saldo asal dana: pengeluaran dihapus => saldo bertambah, pemasukan dihapus => saldo berkurang
-	balanceQuery := "UPDATE wallets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?"
-	if tr.Type == "income" {
-		balanceQuery = "UPDATE wallets SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?"
+	// Administration has all CRUD access; regular user can only delete their own
+	if !isAdmin && tr.UserID != callerUserID {
+		utils.JSONError(w, http.StatusForbidden, "Akses ditolak: Anda tidak memiliki wewenang untuk menghapus transaksi akun lain")
+		return
 	}
-	if _, err = tx.Exec(balanceQuery, tr.Amount, tr.WalletID, userID); err != nil {
+
+	// Pulihkan saldo asal dana: pengeluaran dihapus => saldo bertambah, pemasukan dihapus => saldo berkurang
+	balanceQuery := "UPDATE wallets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+	if tr.Type == "income" {
+		balanceQuery = "UPDATE wallets SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+	}
+	if _, err = tx.Exec(balanceQuery, tr.Amount, tr.WalletID); err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to restore wallet balance")
 		return
 	}
 
 	// Kurangi realisasi amplop anggaran untuk pengeluaran yang dihapus
 	if tr.Type == "expense" && tr.Category != "" {
-		_, _ = tx.Exec("UPDATE budget_envelopes SET spent_amount = CASE WHEN spent_amount - ? < 0 THEN 0 ELSE spent_amount - ? END WHERE user_id = ? AND LOWER(name) LIKE ?", tr.Amount, tr.Amount, userID, "%"+strings.ToLower(tr.Category)+"%")
+		_, _ = tx.Exec("UPDATE budget_envelopes SET spent_amount = CASE WHEN spent_amount - ? < 0 THEN 0 ELSE spent_amount - ? END WHERE user_id = ? AND LOWER(name) LIKE ?", tr.Amount, tr.Amount, tr.UserID, "%"+strings.ToLower(tr.Category)+"%")
 	}
 
 	// Soft delete: tandai deleted = 1 (data tidak dihapus dari database)
-	_, err = tx.Exec("UPDATE transactions SET deleted = 1 WHERE id = ? AND user_id = ?", trID, userID)
+	_, err = tx.Exec("UPDATE transactions SET deleted = 1 WHERE id = ?", trID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to delete transaction")
 		return

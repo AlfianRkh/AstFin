@@ -47,12 +47,16 @@ export const api = {
   createUser: (userData) => request("/admin/users", { method: "POST", body: JSON.stringify(userData) }),
   updateUserRole: (id, roleName) => request(`/admin/users/${id}/role`, { method: "PUT", body: JSON.stringify({ role_name: roleName }) }),
   deleteUser: (id) => request(`/admin/users/${id}`, { method: "DELETE" }),
+  getAdminOverview: () => request("/admin/overview"),
 
   // Dashboard
   getDashboardSummary: () => request("/dashboard/summary"),
 
   // Wallets
-  getWallets: () => request("/wallets"),
+  getWallets: (params = {}) => {
+    const q = typeof params === "object" ? new URLSearchParams(params).toString() : "";
+    return request(`/wallets${q ? `?${q}` : ""}`);
+  },
   createWallet: (data) => request("/wallets", { method: "POST", body: JSON.stringify(data) }),
   updateWallet: (id, data) => request(`/wallets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteWallet: (id) => request(`/wallets/${id}`, { method: "DELETE" }),
@@ -69,13 +73,22 @@ export const api = {
     return request(`/transactions${q ? `?${q}` : ""}`);
   },
   createTransaction: (data) => request("/transactions", { method: "POST", body: JSON.stringify(data) }),
+  updateTransaction: (id, data) => request(`/transactions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteTransaction: (id) => request(`/transactions/${id}`, { method: "DELETE" }),
   scanReceiptOCR: (data) => request("/transactions/scan-ocr", { method: "POST", body: JSON.stringify(data) }),
   getTransactionCategories: (type = "") => request(`/transaction-categories${type ? `?type=${type}` : ""}`),
   createTransactionCategory: (data) => request("/transaction-categories", { method: "POST", body: JSON.stringify(data) }),
 
   // Debts
-  getDebts: (type = "") => request(`/debts${type ? `?type=${type}` : ""}`),
+  getDebts: (params = "") => {
+    let q = "";
+    if (typeof params === "string") {
+      q = params ? `type=${params}` : "";
+    } else if (typeof params === "object") {
+      q = new URLSearchParams(params).toString();
+    }
+    return request(`/debts${q ? `?${q}` : ""}`);
+  },
   createDebt: (data) => request("/debts", { method: "POST", body: JSON.stringify(data) }),
   recordDebtPayment: (data) => request("/debts/payment", { method: "POST", body: JSON.stringify(data) }),
   deleteDebt: (id) => request(`/debts/${id}`, { method: "DELETE" }),

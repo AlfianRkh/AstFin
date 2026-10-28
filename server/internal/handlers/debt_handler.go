@@ -25,18 +25,33 @@ func NewDebtHandler(db *database.DB) *DebtHandler {
 }
 
 func (h *DebtHandler) GetDebts(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	typeFilter := r.URL.Query().Get("type") // hutang, piutang
+	callerRole := strings.ToLower(middleware.GetUserRole(r))
+	callerUserID := middleware.GetUserID(r)
+	isFinance := callerRole == "finance" || callerRole == "admin"
+
+	typeFilter := r.URL.Query().Get("type")
+	targetUserParam := r.URL.Query().Get("user_id")
 
 	query := `
-		SELECT d.id, d.user_id, d.wallet_id, COALESCE(w.name, '') as wallet_name,
+		SELECT d.id, d.user_id, COALESCE(u.username, '') as user_name, COALESCE(u.full_name, '') as user_full_name,
+		       d.wallet_id, COALESCE(w.name, '') as wallet_name,
 		       d.contact_name, d.contact_phone, d.type, d.total_amount, d.paid_amount,
 		       d.status, d.due_date, d.notes, d.created_at, d.updated_at
 		FROM debts d
 		LEFT JOIN wallets w ON d.wallet_id = w.id
-		WHERE d.user_id = ?
+		LEFT JOIN users u ON d.user_id = u.id
+		WHERE 1=1
 	`
-	args := []interface{}{userID}
+	var args []interface{}
+
+	if isFinance && targetUserParam != "" && targetUserParam != "all" {
+		tUID, _ := strconv.Atoi(targetUserParam)
+		query += " AND d.user_id = ?"
+		args = append(args, tUID)
+	} else if !isFinance || (targetUserParam != "all" && r.URL.Query().Get("all") != "1") {
+		query += " AND d.user_id = ?"
+		args = append(args, callerUserID)
+	}
 
 	if typeFilter != "" {
 		query += " AND d.type = ?"
@@ -63,7 +78,7 @@ func (h *DebtHandler) GetDebts(w http.ResponseWriter, r *http.Request) {
 		var walletName sql.NullString
 		var phone, notes sql.NullString
 		if err := rows.Scan(
-			&d.ID, &d.UserID, &walletID, &walletName,
+			&d.ID, &d.UserID, &d.UserName, &d.UserFullName, &walletID, &walletName,
 			&d.ContactName, &phone, &d.Type,
 			&d.TotalAmount, &d.PaidAmount, &d.Status, &d.DueDate,
 			&notes, &d.CreatedAt, &d.UpdatedAt,
@@ -82,22 +97,22 @@ func (h *DebtHandler) GetDebts(w http.ResponseWriter, r *http.Request) {
 				d.Notes = notes.String
 			}
 			d.Remaining = d.TotalAmount - d.PaidAmount
-			if d.Remaining < 0 {
-				d.Remaining = 0
-			}
 
-			// Check if overdue
-			if d.Status != "paid" && d.DueDate < todayStr {
+			if d.Status != "paid" && d.DueDate != "" && d.DueDate < todayStr {
 				d.Status = "overdue"
 				overdueCount++
 			}
 
-			if d.Type == "piutang" {
-				totalPiutang++
-				totalPiutangAmount += d.Remaining
-			} else {
+			if d.Type == "hutang" {
 				totalHutang++
-				totalHutangAmount += d.Remaining
+				if d.Status != "paid" {
+					totalHutangAmount += d.Remaining
+				}
+			} else {
+				totalPiutang++
+				if d.Status != "paid" {
+					totalPiutangAmount += d.Remaining
+				}
 			}
 
 			debts = append(debts, d)
@@ -106,9 +121,10 @@ func (h *DebtHandler) GetDebts(w http.ResponseWriter, r *http.Request) {
 
 	utils.JSON(w, http.StatusOK, map[string]interface{}{
 		"debts":                debts,
+		"total_piutang":        totalPiutang,
+		"total_hutang":         totalHutang,
 		"total_piutang_amount": totalPiutangAmount,
 		"total_hutang_amount":  totalHutangAmount,
-		"net_balance":          totalPiutangAmount - totalHutangAmount,
 		"overdue_count":        overdueCount,
 	})
 }

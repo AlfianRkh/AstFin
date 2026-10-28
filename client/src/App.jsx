@@ -14,6 +14,7 @@ import { PengadaanRadar } from "./pages/PengadaanRadar";
 import { DapurInventaris } from "./pages/DapurInventaris";
 import { CompareHarga } from "./pages/CompareHarga";
 import { UserManagement } from "./pages/UserManagement";
+import { AdminPortal } from "./pages/AdminPortal";
 import { VerifyEmail } from "./pages/VerifyEmail";
 
 // Modals
@@ -163,6 +164,14 @@ function MainLayout() {
                   onOpenAddRadar={() => setModalRadar(true)}
                   onOpenTransaction={handleOpenTransaction}
                 />
+              }
+            />
+            <Route
+              path="/admin/portal"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "finance"]}>
+                  <AdminPortal key={refreshKey} />
+                </ProtectedRoute>
               }
             />
             <Route

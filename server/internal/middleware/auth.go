@@ -82,3 +82,11 @@ func GetUserID(r *http.Request) int {
 	}
 	return 0
 }
+
+func GetUserRole(r *http.Request) string {
+	claims := GetClaims(r)
+	if claims != nil {
+		return claims.Role
+	}
+	return ""
+}

@@ -6,7 +6,7 @@ import { api } from "../api/client";
 export function Sidebar({ isOpen = false, onClose = () => {} }) {
   const location = useLocation();
   const currentPath = location.pathname;
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isFinance } = useAuth();
   const [netLiquidity, setNetLiquidity] = useState(0);
 
   useEffect(() => {
@@ -37,6 +37,7 @@ export function Sidebar({ isOpen = false, onClose = () => {} }) {
   const intelItems = [
     { path: "/ai-insights", label: "Cross-Module AI Insights", icon: "psychology" },
     { path: "/pengaturan-kalibrasi", label: "Pengaturan & Kalibrasi", icon: "tune" },
+    ...(isAdmin || isFinance ? [{ path: "/admin/portal", label: "Portal Administrasi", icon: "shield_person" }] : []),
     ...(isAdmin ? [{ path: "/admin/users", label: "Kelola Role & Pengguna", icon: "admin_panel_settings" }] : []),
   ];
 

@@ -42,6 +42,7 @@ func main() {
 	dashH := handlers.NewDashboardHandler(db)
 	priceH := handlers.NewPriceHandler(db)
 	uploadH := handlers.NewUploadHandler("./uploads")
+	adminH := handlers.NewAdminHandler(db)
 
 	r := chi.NewRouter()
 
@@ -117,6 +118,7 @@ func main() {
 			// Transactions, Categories & OCR
 			p.Get("/transactions", trH.GetTransactions)
 			p.Post("/transactions", trH.CreateTransaction)
+			p.Put("/transactions/{id}", trH.UpdateTransaction)
 			p.Delete("/transactions/{id}", trH.DeleteTransaction)
 			p.Post("/transactions/scan-ocr", trH.ScanReceiptOCR)
 			p.Get("/transaction-categories", trH.GetCategories)
@@ -185,6 +187,12 @@ func main() {
 			// Geocoding Proxy (OpenStreetMap Nominatim with Rate-Limiting & In-Memory Cache)
 			p.Get("/geo/search", priceH.SearchGeo)
 			p.Get("/geo/reverse", priceH.ReverseGeo)
+
+			// Administration & Finance Portal
+			p.Group(func(portal chi.Router) {
+				portal.Use(middleware.RequireRole("admin", "finance"))
+				portal.Get("/admin/overview", adminH.GetOverview)
+			})
 
 			// Admin Only: User & Role Management
 			p.Group(func(admin chi.Router) {

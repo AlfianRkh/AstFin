@@ -24,13 +24,30 @@ func NewWalletHandler(db *database.DB) *WalletHandler {
 }
 
 func (h *WalletHandler) GetWallets(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	rows, err := h.db.Query(`
-		SELECT id, user_id, name, type, balance, COALESCE(credit_limit, 0.0), account_number, created_at, updated_at
-		FROM wallets
-		WHERE user_id = ?
-		ORDER BY id ASC
-	`, userID)
+	callerRole := strings.ToLower(middleware.GetUserRole(r))
+	callerUserID := middleware.GetUserID(r)
+	isFinance := callerRole == "finance" || callerRole == "admin"
+	targetUserParam := r.URL.Query().Get("user_id")
+
+	query := `
+		SELECT w.id, w.user_id, COALESCE(u.username, '') as user_name, COALESCE(u.full_name, '') as user_full_name,
+		       w.name, w.type, w.balance, COALESCE(w.credit_limit, 0.0), w.account_number, w.created_at, w.updated_at
+		FROM wallets w
+		LEFT JOIN users u ON w.user_id = u.id
+	`
+	var args []interface{}
+	if isFinance && (targetUserParam == "" || targetUserParam == "all") && (r.URL.Query().Get("all") == "1" || targetUserParam == "all") {
+		query += " ORDER BY w.user_id ASC, w.id ASC"
+	} else if isFinance && targetUserParam != "" && targetUserParam != "all" {
+		tUID, _ := strconv.Atoi(targetUserParam)
+		query += " WHERE w.user_id = ? ORDER BY w.id ASC"
+		args = append(args, tUID)
+	} else {
+		query += " WHERE w.user_id = ? ORDER BY w.id ASC"
+		args = append(args, callerUserID)
+	}
+
+	rows, err := h.db.Query(query, args...)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to fetch wallets: "+err.Error())
 		return
@@ -42,7 +59,7 @@ func (h *WalletHandler) GetWallets(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var wl models.Wallet
 		var accNum sql.NullString
-		if err := rows.Scan(&wl.ID, &wl.UserID, &wl.Name, &wl.Type, &wl.Balance, &wl.CreditLimit, &accNum, &wl.CreatedAt, &wl.UpdatedAt); err == nil {
+		if err := rows.Scan(&wl.ID, &wl.UserID, &wl.UserName, &wl.UserFullName, &wl.Name, &wl.Type, &wl.Balance, &wl.CreditLimit, &accNum, &wl.CreatedAt, &wl.UpdatedAt); err == nil {
 			if accNum.Valid {
 				wl.AccountNumber = accNum.String
 			}
