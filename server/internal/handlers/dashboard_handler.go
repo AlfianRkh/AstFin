@@ -45,7 +45,7 @@ func (h *DashboardHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 		SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0),
 		       COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)
 		FROM transactions
-		WHERE user_id = ? AND transaction_date >= ?
+		WHERE user_id = ? AND deleted = 0 AND transaction_date >= ?
 	`, userID, firstDayOfMonth).Scan(&monthIncome, &monthExpense)
 	summary.SurplusThisMonth = monthIncome - monthExpense
 
@@ -91,7 +91,7 @@ func (h *DashboardHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(t.receipt_url, ''), t.ocr_accuracy, t.transaction_date, t.created_at
 		FROM transactions t
 		LEFT JOIN wallets w ON t.wallet_id = w.id
-		WHERE t.user_id = ?
+		WHERE t.user_id = ? AND t.deleted = 0
 		ORDER BY t.transaction_date DESC, t.id DESC
 		LIMIT 5
 	`, userID)
@@ -187,7 +187,7 @@ func (h *DashboardHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 			SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0),
 			       COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)
 			FROM transactions
-			WHERE user_id = ? AND transaction_date >= ? AND transaction_date < ?
+			WHERE user_id = ? AND deleted = 0 AND transaction_date >= ? AND transaction_date < ?
 		`, userID, monthStart, nextMonthStart).Scan(&inc, &exp)
 
 		var debtPay float64

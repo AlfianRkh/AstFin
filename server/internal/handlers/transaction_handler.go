@@ -32,6 +32,12 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 		limit = l
 	}
 
+	offset := 0
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o > 0 {
+		offset = o
+	}
+	paged := r.URL.Query().Get("paged") == "1"
+
 	filterType := r.URL.Query().Get("type")
 	filterCategory := r.URL.Query().Get("category")
 
@@ -41,7 +47,7 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 		       t.ocr_accuracy, t.transaction_date, COALESCE(t.due_date, ''), t.created_at
 		FROM transactions t
 		LEFT JOIN wallets w ON t.wallet_id = w.id
-		WHERE t.user_id = ?
+		WHERE t.user_id = ? AND t.deleted = 0
 	`
 	args := []interface{}{userID}
 
@@ -61,8 +67,15 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	query += " ORDER BY t.transaction_date DESC, t.id DESC LIMIT ?"
-	args = append(args, limit)
+	// Hitung total data (untuk pagination) memakai filter yang sama
+	totalCount := 0
+	if paged {
+		countQuery := "SELECT COUNT(*) FROM transactions t WHERE " + query[strings.Index(query, "WHERE t.user_id")+len("WHERE "):]
+		_ = h.db.QueryRow(countQuery, args...).Scan(&totalCount)
+	}
+
+	query += " ORDER BY t.transaction_date DESC, t.id DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
 
 	rows, err := h.db.Query(query, args...)
 	if err != nil {
@@ -94,6 +107,16 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 			}
 			transactions = append(transactions, tr)
 		}
+	}
+
+	if paged {
+		utils.JSON(w, http.StatusOK, map[string]interface{}{
+			"items":  transactions,
+			"total":  totalCount,
+			"limit":  limit,
+			"offset": offset,
+		})
+		return
 	}
 
 	utils.JSON(w, http.StatusOK, transactions)
@@ -274,22 +297,30 @@ func (h *TransactionHandler) DeleteTransaction(w http.ResponseWriter, r *http.Re
 	defer tx.Rollback()
 
 	var tr models.Transaction
-	err = tx.QueryRow("SELECT id, wallet_id, type, amount FROM transactions WHERE id = ? AND user_id = ?", trID, userID).
-		Scan(&tr.ID, &tr.WalletID, &tr.Type, &tr.Amount)
+	err = tx.QueryRow("SELECT id, wallet_id, type, amount, category FROM transactions WHERE id = ? AND user_id = ? AND deleted = 0", trID, userID).
+		Scan(&tr.ID, &tr.WalletID, &tr.Type, &tr.Amount, &tr.Category)
 	if err != nil {
 		utils.JSONError(w, http.StatusNotFound, "Transaction not found")
 		return
 	}
 
-	// Revert wallet balance
+	// Pulihkan saldo asal dana: pengeluaran dihapus => saldo bertambah, pemasukan dihapus => saldo berkurang
+	balanceQuery := "UPDATE wallets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?"
 	if tr.Type == "income" {
-		_, _ = tx.Exec("UPDATE wallets SET balance = balance - ? WHERE id = ?", tr.Amount, tr.WalletID)
-	} else {
-		_, _ = tx.Exec("UPDATE wallets SET balance = balance + ? WHERE id = ?", tr.Amount, tr.WalletID)
+		balanceQuery = "UPDATE wallets SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?"
+	}
+	if _, err = tx.Exec(balanceQuery, tr.Amount, tr.WalletID, userID); err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Failed to restore wallet balance")
+		return
 	}
 
-	// Delete
-	_, err = tx.Exec("DELETE FROM transactions WHERE id = ?", trID)
+	// Kurangi realisasi amplop anggaran untuk pengeluaran yang dihapus
+	if tr.Type == "expense" && tr.Category != "" {
+		_, _ = tx.Exec("UPDATE budget_envelopes SET spent_amount = CASE WHEN spent_amount - ? < 0 THEN 0 ELSE spent_amount - ? END WHERE user_id = ? AND LOWER(name) LIKE ?", tr.Amount, tr.Amount, userID, "%"+strings.ToLower(tr.Category)+"%")
+	}
+
+	// Soft delete: tandai deleted = 1 (data tidak dihapus dari database)
+	_, err = tx.Exec("UPDATE transactions SET deleted = 1 WHERE id = ? AND user_id = ?", trID, userID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to delete transaction")
 		return

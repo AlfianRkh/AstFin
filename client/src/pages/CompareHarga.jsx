@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { api } from "../api/client";
+import { api, getImageUrl } from "../api/client";
 import { RecordPriceModal } from "../components/modals/RecordPriceModal";
 import { AddStoreModal } from "../components/modals/AddStoreModal";
+import { EditProductModal } from "../components/modals/EditProductModal";
+import { ScanBarcodeModal } from "../components/modals/ScanBarcodeModal";
 
 export function CompareHarga() {
   const [activeTab, setActiveTab] = useState("products"); // products | check | stores | settings
@@ -21,6 +23,15 @@ export function CompareHarga() {
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [targetProductForEntry, setTargetProductForEntry] = useState(null);
   const [isAddStoreModalOpen, setIsAddStoreModalOpen] = useState(false);
+
+  // Edit Product state
+  const [isEditProductOpen, setIsEditProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+
+  // Barcode Scanner states
+  const [isCatalogScanOpen, setIsCatalogScanOpen] = useState(false);
+  const [isPriceCheckScanOpen, setIsPriceCheckScanOpen] = useState(false);
+  const [scannedProductAlert, setScannedProductAlert] = useState(null);
 
   // Price Check Calculator state
   const [checkForm, setCheckForm] = useState({
@@ -150,6 +161,76 @@ export function CompareHarga() {
       fetchProducts();
     } catch (err) {
       alert("Gagal menghapus produk: " + err.message);
+    }
+  };
+
+  // Handle Catalog Barcode Scan
+  const handleCatalogBarcodeScan = async (scannedCode) => {
+    try {
+      const match = products.find((p) => p.barcode && p.barcode.toLowerCase() === scannedCode.toLowerCase());
+      if (match) {
+        handleViewDetail(match.id);
+        return;
+      }
+      // If not in current list, search backend
+      const res = await api.getPriceProducts({ barcode: scannedCode });
+      const found = Array.isArray(res?.data) && res.data.length > 0 ? res.data[0] : null;
+      if (found) {
+        handleViewDetail(found.id);
+      } else {
+        setSearchQuery(scannedCode);
+        setTimeout(fetchProducts, 50);
+      }
+    } catch {
+      setSearchQuery(scannedCode);
+      setTimeout(fetchProducts, 50);
+    }
+  };
+
+  // Handle Price Check Barcode Scan (Tab 2)
+  const handlePriceCheckBarcodeScan = async (scannedCode) => {
+    setCheckError("");
+    setScannedProductAlert(null);
+    try {
+      let match = products.find((p) => p.barcode && p.barcode.toLowerCase() === scannedCode.toLowerCase());
+      if (!match) {
+        const res = await api.getPriceProducts({ barcode: scannedCode });
+        match = Array.isArray(res?.data) && res.data.length > 0 ? res.data[0] : null;
+      }
+
+      if (match) {
+        setCheckForm((prev) => ({
+          ...prev,
+          product_name: match.name,
+          purchase_unit: match.base_unit || "pcs",
+        }));
+        setScannedProductAlert(match);
+
+        // If price already entered, auto run price check!
+        if (checkForm.price_total && parseFloat(checkForm.price_total) > 0) {
+          const res = await api.checkPrice({
+            product_name: match.name,
+            purchase_unit: match.base_unit || "pcs",
+            purchase_qty: parseFloat(checkForm.purchase_qty) || 1,
+            units_per_package: checkForm.units_per_package ? parseFloat(checkForm.units_per_package) : null,
+            price_total: parseFloat(checkForm.price_total) || 0,
+            discount_type: checkForm.discount_type,
+            discount_value: parseFloat(checkForm.discount_value) || 0,
+          });
+          if (res.data) setCheckResult(res.data);
+        }
+      } else {
+        setCheckForm((prev) => ({
+          ...prev,
+          product_name: scannedCode,
+        }));
+        setScannedProductAlert({
+          name: scannedCode,
+          isNew: true,
+        });
+      }
+    } catch (err) {
+      setCheckError("Gagal memproses barcode: " + err.message);
     }
   };
 
@@ -309,6 +390,16 @@ export function CompareHarga() {
               </form>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCatalogScanOpen(true)}
+                  className="px-3.5 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0"
+                  title="Pindai barcode untuk mencari produk otomatis"
+                >
+                  <span className="material-symbols-outlined text-[18px]">barcode_scanner</span>
+                  <span className="hidden sm:inline">Scan Barcode</span>
+                </button>
+
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
@@ -369,11 +460,20 @@ export function CompareHarga() {
                     className="bg-surface-container-low border border-outline-variant/25 rounded-3xl p-5 hover:border-primary/40 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-lg hover:shadow-primary/5 group"
                   >
                     <div>
-                      {/* Top Tag & Category */}
+                      {/* Top Tag & Category & Barcode */}
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                          {p.category_name || "Lainnya"}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                            {p.category_name || "Lainnya"}
+                          </span>
+
+                          {p.barcode && (
+                            <span className="text-[10px] font-mono font-medium text-outline-variant bg-surface-container-high px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px]">qr_code</span>
+                              <span>{p.barcode}</span>
+                            </span>
+                          )}
+                        </div>
 
                         {p.price_trend && (
                           <div
@@ -393,10 +493,33 @@ export function CompareHarga() {
                         )}
                       </div>
 
-                      {/* Product Name */}
-                      <h3 className="font-bold text-base text-on-surface group-hover:text-primary transition-colors line-clamp-1">
-                        {p.name}
-                      </h3>
+                      {/* Product Image & Name */}
+                      <div className="flex items-center gap-3">
+                        {p.image_url ? (
+                          <div className="w-14 h-14 rounded-2xl bg-surface-container-highest overflow-hidden shrink-0 border border-outline-variant/30">
+                            <img
+                              src={getImageUrl(p.image_url)}
+                              alt={p.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.target.style.display = "none";
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-14 h-14 rounded-2xl bg-surface-container-highest/80 flex items-center justify-center shrink-0 border border-outline-variant/20 text-outline-variant">
+                            <span className="material-symbols-outlined text-2xl">shopping_basket</span>
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-bold text-base text-on-surface group-hover:text-primary transition-colors line-clamp-1">
+                            {p.name}
+                          </h3>
+                          <span className="text-[11px] text-outline-variant uppercase">
+                            Satuan: {p.base_unit}
+                          </span>
+                        </div>
+                      </div>
 
                       {/* Main Price Stats */}
                       <div className="mt-4 p-3 bg-surface-container-lowest/80 rounded-2xl border border-outline-variant/15 space-y-2">
@@ -449,7 +572,19 @@ export function CompareHarga() {
                         title="Catat harga untuk produk ini di lokasi / waktu lain"
                       >
                         <span className="material-symbols-outlined text-[16px]">add_location_alt</span>
-                        <span>+ Bandingkan Lokasi</span>
+                        <span>+ Lokasi</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingProduct(p);
+                          setIsEditProductOpen(true);
+                        }}
+                        className="p-2 bg-surface-container hover:bg-surface-container-high rounded-xl text-outline-variant hover:text-primary transition-colors"
+                        title="Edit Detail Produk & Foto"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
                       </button>
 
                       <button
@@ -503,15 +638,57 @@ export function CompareHarga() {
 
               <form onSubmit={handleRunPriceCheck} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-outline-variant uppercase tracking-wider mb-1.5">
-                    Nama Barang yang Sedang Dilihat *
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-outline-variant uppercase tracking-wider">
+                      Nama Barang yang Sedang Dilihat *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsPriceCheckScanOpen(true)}
+                      className="px-3 py-1 bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">barcode_scanner</span>
+                      <span>Scan Barcode (Tanpa Ketik)</span>
+                    </button>
+                  </div>
+
+                  {scannedProductAlert && (
+                    <div className="mb-2 p-3 bg-primary/10 border border-primary/25 rounded-2xl flex items-center gap-3">
+                      {scannedProductAlert.image_url ? (
+                        <img
+                          src={getImageUrl(scannedProductAlert.image_url)}
+                          alt={scannedProductAlert.name}
+                          className="w-10 h-10 rounded-xl object-cover border border-primary/30"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+                          <span className="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] text-primary uppercase font-bold tracking-wider block">
+                          {scannedProductAlert.isNew ? "Barcode Terbaca (Produk Baru)" : "Barang Terdeteksi di Database"}
+                        </span>
+                        <strong className="text-xs text-on-surface block truncate">
+                          {scannedProductAlert.name}
+                        </strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setScannedProductAlert(null)}
+                        className="text-xs text-outline-variant hover:text-on-surface"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
                   <input
                     type="text"
                     required
                     value={checkForm.product_name}
                     onChange={(e) => setCheckForm({ ...checkForm, product_name: e.target.value })}
-                    placeholder="Contoh: Telur Ayam Negeri, Beras Rojolele 5kg, Minyak Sania"
+                    placeholder="Ketik nama atau tekan 'Scan Barcode' di atas"
                     className="w-full bg-surface-container-highest/60 border border-outline-variant/30 rounded-2xl px-4 py-3 text-xs text-on-surface placeholder:text-outline-variant focus:outline-none focus:border-primary transition-colors font-medium"
                   />
                 </div>
@@ -905,23 +1082,60 @@ export function CompareHarga() {
           <div className="bg-surface-container-low border border-outline-variant/30 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             {/* Drawer Header */}
             <div className="p-5 border-b border-outline-variant/15 flex items-center justify-between shrink-0">
-              <div>
-                <span className="text-[10px] font-bold text-primary uppercase tracking-wider">
-                  {selectedProductDetail.category_name}
-                </span>
-                <h3 className="font-extrabold text-lg text-on-surface">
-                  {selectedProductDetail.name}
-                </h3>
-                <p className="text-xs text-outline-variant">
-                  Riwayat Perbandingan Harga di Berbagai Toko & Waktu
-                </p>
+              <div className="flex items-center gap-3">
+                {selectedProductDetail.image_url ? (
+                  <img
+                    src={getImageUrl(selectedProductDetail.image_url)}
+                    alt={selectedProductDetail.name}
+                    className="w-14 h-14 rounded-2xl object-cover border border-outline-variant/30 shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-2xl bg-surface-container-high border border-outline-variant/20 flex items-center justify-center text-outline-variant shrink-0">
+                    <span className="material-symbols-outlined text-2xl">shopping_basket</span>
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-primary uppercase tracking-wider">
+                      {selectedProductDetail.category_name}
+                    </span>
+                    {selectedProductDetail.barcode && (
+                      <span className="text-[10px] font-mono text-outline-variant bg-surface-container-high px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[12px]">qr_code</span>
+                        <span>{selectedProductDetail.barcode}</span>
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-extrabold text-lg text-on-surface">
+                    {selectedProductDetail.name}
+                  </h3>
+                  <p className="text-xs text-outline-variant">
+                    Satuan Komparasi: <strong className="uppercase">{selectedProductDetail.base_unit}</strong>
+                  </p>
+                </div>
               </div>
-              <button
-                onClick={() => setSelectedProductDetail(null)}
-                className="p-1.5 rounded-full hover:bg-surface-container text-outline-variant hover:text-on-surface transition-colors"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingProduct(selectedProductDetail);
+                    setIsEditProductOpen(true);
+                  }}
+                  className="px-3 py-1.5 bg-surface-container-high hover:bg-surface-container-highest border border-outline-variant/25 rounded-xl text-xs font-semibold text-on-surface flex items-center gap-1 transition-colors"
+                  title="Edit Detail Produk"
+                >
+                  <span className="material-symbols-outlined text-[16px]">edit</span>
+                  <span>Edit Produk</span>
+                </button>
+
+                <button
+                  onClick={() => setSelectedProductDetail(null)}
+                  className="p-1.5 rounded-full hover:bg-surface-container text-outline-variant hover:text-on-surface transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
             </div>
 
             {/* Drawer Body */}
@@ -1027,6 +1241,41 @@ export function CompareHarga() {
         onStoreCreated={() => {
           fetchStores();
         }}
+      />
+
+      {/* Edit Product Modal */}
+      <EditProductModal
+        isOpen={isEditProductOpen}
+        product={editingProduct}
+        categories={categories}
+        onClose={() => {
+          setIsEditProductOpen(false);
+          setEditingProduct(null);
+        }}
+        onSuccess={() => {
+          fetchProducts();
+          if (selectedProductDetail && editingProduct && selectedProductDetail.id === editingProduct.id) {
+            handleViewDetail(selectedProductDetail.id);
+          }
+        }}
+      />
+
+      {/* Catalog Barcode Scanner Modal (Tab 1) */}
+      <ScanBarcodeModal
+        isOpen={isCatalogScanOpen}
+        onClose={() => setIsCatalogScanOpen(false)}
+        onScan={handleCatalogBarcodeScan}
+        title="Pindai Barcode Produk Katalog"
+        description="Arahkan kamera ke barcode kemasan barang untuk membuka riwayat harganya"
+      />
+
+      {/* Price Check Barcode Scanner Modal (Tab 2) */}
+      <ScanBarcodeModal
+        isOpen={isPriceCheckScanOpen}
+        onClose={() => setIsPriceCheckScanOpen(false)}
+        onScan={handlePriceCheckBarcodeScan}
+        title="Pindai Barcode Cek Harga"
+        description="Arahkan kamera ke barcode rak atau kemasan barang di toko tanpa mengetik nama barang"
       />
     </div>
   );

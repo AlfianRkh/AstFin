@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { api } from "../../api/client";
 import { OSMMapPicker } from "../OSMMapPicker";
 
-export function AddStoreModal({ isOpen, onClose, onStoreCreated }) {
+export function AddStoreModal({ isOpen, onClose, onStoreCreated, initialName = "" }) {
   const [name, setName] = useState("");
   const [storeType, setStoreType] = useState("minimarket");
   const [isMobile, setIsMobile] = useState(false);
@@ -11,6 +11,13 @@ export function AddStoreModal({ isOpen, onClose, onStoreCreated }) {
   const [lng, setLng] = useState(112.7183);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(initialName || "");
+      setError("");
+    }
+  }, [isOpen, initialName]);
 
   if (!isOpen) return null;
 

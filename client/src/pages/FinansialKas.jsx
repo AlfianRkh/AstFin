@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
+import { Pagination } from "../components/Pagination";
 import { PayCreditCardModal } from "../components/modals/PayCreditCardModal";
 import { AdjustCreditLimitModal } from "../components/modals/AdjustCreditLimitModal";
 
 export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpenWallet, onOpenEnvelope, onRecordPayment }) {
-  const [activeTab, setActiveTab] = useState("all"); // all, transactions, debts
+  const [activeTab, setActiveTab] = useState("transactions"); // transactions, debts
   const [wallets, setWallets] = useState([]);
   const [envelopes, setEnvelopes] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [debtData, setDebtData] = useState({ debts: [], total_piutang_amount: 0, total_hutang_amount: 0, net_balance: 0, overdue_count: 0 });
   const [loading, setLoading] = useState(true);
+
+  // Pagination (default 10 per halaman, maksimal 100)
+  const [trPage, setTrPage] = useState(1);
+  const [trLimit, setTrLimit] = useState(10);
+  const [trTotal, setTrTotal] = useState(0);
+  const [debtPage, setDebtPage] = useState(1);
+  const [debtLimit, setDebtLimit] = useState(10);
 
   // Credit Card Modals State
   const [payCardModalOpen, setPayCardModalOpen] = useState(false);
@@ -29,12 +37,20 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
       const [walletRes, envRes, trRes, debtRes] = await Promise.all([
         api.getWallets(),
         api.getEnvelopes(),
-        api.getTransactions(),
+        api.getTransactions({ paged: 1, limit: trLimit, offset: (trPage - 1) * trLimit }),
         api.getDebts(),
       ]);
       setWallets(walletRes.data?.wallets || []);
       setEnvelopes(envRes.data || []);
-      setTransactions(trRes.data || []);
+      const trData = trRes.data;
+      if (trData && !Array.isArray(trData) && Array.isArray(trData.items)) {
+        setTransactions(trData.items);
+        setTrTotal(trData.total || 0);
+      } else {
+        const arr = Array.isArray(trData) ? trData : [];
+        setTransactions(arr);
+        setTrTotal(arr.length);
+      }
       setDebtData(debtRes.data || { debts: [], total_piutang_amount: 0, total_hutang_amount: 0, net_balance: 0, overdue_count: 0 });
     } catch (err) {
       console.error("Failed to load financial data:", err);
@@ -45,7 +61,17 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
 
   useEffect(() => {
     loadAllData();
-  }, []);
+  }, [trPage, trLimit]);
+
+  // Jika halaman melebihi total halaman (mis. setelah hapus data), mundurkan
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(trTotal / trLimit));
+    if (trPage > maxPage) setTrPage(maxPage);
+  }, [trTotal, trLimit, trPage]);
+
+  const debtMaxPage = Math.max(1, Math.ceil(debtData.debts.length / debtLimit));
+  const safeDebtPage = Math.min(debtPage, debtMaxPage);
+  const pagedDebts = debtData.debts.slice((safeDebtPage - 1) * debtLimit, safeDebtPage * debtLimit);
 
   const cashWallets = wallets.filter((w) => w.type !== "Credit Card" && w.type !== "Kartu Kredit");
   const creditCardWallets = wallets.filter((w) => w.type === "Credit Card" || w.type === "Kartu Kredit");
@@ -151,48 +177,6 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
               <span>+ Catat Utang/Piutang</span>
             </button>
           </div>
-        </div>
-
-        {/* Matrix Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 mt-2">
-          <button
-            onClick={() => setActiveTab("all")}
-            className={`text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2 shrink-0 transition-colors ${
-              activeTab === "all" ? "bg-surface-container-highest text-primary shadow-sm" : "bg-surface-container-low text-on-surface-variant hover:text-on-surface"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">hub</span>
-            <span>Semua Arus Kas (Terpadu)</span>
-            <span className="bg-primary/20 text-primary text-[10px] px-1.5 py-0.2 rounded-full ml-1">
-              {transactions.length + debtData.debts.length}
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab("transactions")}
-            className={`text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 shrink-0 transition-colors ${
-              activeTab === "transactions" ? "bg-surface-container-highest text-primary shadow-sm" : "bg-surface-container-low text-on-surface-variant hover:text-on-surface"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">receipt_long</span>
-            <span>Buku Transaksi Struk (SmartFin)</span>
-            <span className="bg-surface-container text-on-surface-variant text-[10px] px-1.5 py-0.2 rounded-full ml-1">
-              {transactions.length}
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab("debts")}
-            className={`text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 shrink-0 transition-colors ${
-              activeTab === "debts" ? "bg-surface-container-highest text-primary shadow-sm" : "bg-surface-container-low text-on-surface-variant hover:text-on-surface"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">account_balance</span>
-            <span>Buku Utang & Piutang (DebtTracker)</span>
-            {debtData.overdue_count > 0 && (
-              <span className="bg-error-container text-on-error-container text-[10px] px-1.5 py-0.2 rounded-full ml-1 font-bold">
-                {debtData.overdue_count} Overdue
-              </span>
-            )}
-          </button>
         </div>
       </div>
 
@@ -331,10 +315,10 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
                         {w.type === "Cash"
                           ? "payments"
                           : w.type === "E-Wallet"
-                          ? "phone_android"
-                          : w.type === "Investment"
-                          ? "trending_up"
-                          : "account_balance"}
+                            ? "phone_android"
+                            : w.type === "Investment"
+                              ? "trending_up"
+                              : "account_balance"}
                       </span>
                     </div>
                     <div className="flex flex-col min-w-0">
@@ -531,13 +515,49 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
         )}
       </div>
 
+      {/* Tabs Buku Transaksi & Buku Utang-Piutang (Di Bawah Kartu Kredit) */}
+      <div className="px-space-md lg:px-space-xl pt-space-sm pb-1">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <button
+            onClick={() => setActiveTab("transactions")}
+            className={`text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 shrink-0 transition-colors ${
+              activeTab === "transactions"
+                ? "bg-surface-container-highest text-primary shadow-sm font-bold border border-primary/20"
+                : "bg-surface-container-low text-on-surface-variant hover:text-on-surface border border-outline-variant/10"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+            <span>Buku Transaksi Struk (SmartFin)</span>
+            <span className="bg-surface-container text-on-surface-variant text-[10px] px-1.5 py-0.2 rounded-full ml-1">
+              {trTotal}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab("debts")}
+            className={`text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 shrink-0 transition-colors ${
+              activeTab === "debts"
+                ? "bg-surface-container-highest text-secondary shadow-sm font-bold border border-secondary/20"
+                : "bg-surface-container-low text-on-surface-variant hover:text-on-surface border border-outline-variant/10"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">account_balance</span>
+            <span>Buku Utang & Piutang (DebtTracker)</span>
+            {debtData.overdue_count > 0 && (
+              <span className="bg-error-container text-on-error-container text-[10px] px-1.5 py-0.2 rounded-full ml-1 font-bold">
+                {debtData.overdue_count} Overdue
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Main Content Layout */}
       <div className="px-space-md lg:px-space-xl py-space-md">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
           {/* Left Column (Transactions & Debts) */}
           <div className="lg:col-span-8 flex flex-col gap-space-lg min-w-0">
             {/* Transactions Section */}
-            {(activeTab === "all" || activeTab === "transactions") && (
+            {activeTab === "transactions" && (
               <div className="bg-surface-container-low rounded-xl p-space-md lg:p-space-lg shadow-md flex flex-col border border-outline-variant/10">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pb-space-md">
                   <div>
@@ -573,9 +593,8 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
                         className="bg-surface-container p-space-md rounded-xl hover:bg-surface-container-high transition-all flex flex-col md:flex-row md:items-center justify-between gap-space-sm"
                       >
                         <div className="flex items-start gap-space-md min-w-0">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                            tr.type === "income" ? "bg-primary/20 text-primary" : "bg-error/15 text-error"
-                          }`}>
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${tr.type === "income" ? "bg-primary/20 text-primary" : "bg-error/15 text-error"
+                            }`}>
                             <span className="material-symbols-outlined text-[22px]">
                               {tr.type === "income" ? "arrow_downward" : "shopping_cart"}
                             </span>
@@ -631,11 +650,20 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
                     ))}
                   </div>
                 )}
+                {trTotal > 0 && (
+                  <Pagination
+                    page={trPage}
+                    limit={trLimit}
+                    total={trTotal}
+                    onPageChange={setTrPage}
+                    onLimitChange={(n) => { setTrLimit(Math.min(100, n)); setTrPage(1); }}
+                  />
+                )}
               </div>
             )}
 
             {/* Debts & Receivables Section */}
-            {(activeTab === "all" || activeTab === "debts") && (
+            {activeTab === "debts" && (
               <div className="bg-surface-container-low rounded-xl p-space-md lg:p-space-lg shadow-md flex flex-col border border-outline-variant/10">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pb-space-md">
                   <div>
@@ -663,16 +691,15 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
                   />
                 ) : (
                   <div className="flex flex-col gap-2.5 mt-2">
-                    {debtData.debts.map((d) => (
+                    {pagedDebts.map((d) => (
                       <div
                         key={d.id}
                         className="bg-surface-container p-space-md rounded-xl hover:bg-surface-container-high transition-all flex flex-col md:flex-row md:items-center justify-between gap-space-sm border-l-4"
                         style={{ borderLeftColor: d.type === "piutang" ? "#4cd7f6" : "#ffb4ab" }}
                       >
                         <div className="flex items-start gap-space-md min-w-0">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                            d.type === "piutang" ? "bg-secondary/15 text-secondary" : "bg-error/15 text-error"
-                          }`}>
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${d.type === "piutang" ? "bg-secondary/15 text-secondary" : "bg-error/15 text-error"
+                            }`}>
                             <span className="material-symbols-outlined text-[22px]">
                               {d.type === "piutang" ? "outbox" : "move_to_inbox"}
                             </span>
@@ -686,13 +713,12 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
                                   <span>{d.wallet_name}</span>
                                 </span>
                               )}
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                                d.status === "paid"
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${d.status === "paid"
                                   ? "bg-primary/20 text-primary"
                                   : d.status === "overdue"
-                                  ? "bg-error-container text-on-error-container animate-pulse"
-                                  : "bg-surface-container-highest text-secondary"
-                              }`}>
+                                    ? "bg-error-container text-on-error-container animate-pulse"
+                                    : "bg-surface-container-highest text-secondary"
+                                }`}>
                                 {d.status === "overdue" ? "OVERDUE" : d.status.toUpperCase()}
                               </span>
                               <span className="text-[10px] text-outline font-semibold">
@@ -739,6 +765,15 @@ export function FinansialKas({ onOpenScan, onOpenTransaction, onOpenDebt, onOpen
                       </div>
                     ))}
                   </div>
+                )}
+                {debtData.debts.length > 0 && (
+                  <Pagination
+                    page={safeDebtPage}
+                    limit={debtLimit}
+                    total={debtData.debts.length}
+                    onPageChange={setDebtPage}
+                    onLimitChange={(n) => { setDebtLimit(Math.min(100, n)); setDebtPage(1); }}
+                  />
                 )}
               </div>
             )}

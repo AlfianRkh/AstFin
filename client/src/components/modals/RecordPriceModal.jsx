@@ -2,7 +2,9 @@ import React, { useState, useEffect } from "react";
 import { api } from "../../api/client";
 import { OSMMapPicker } from "../OSMMapPicker";
 import { AddStoreModal } from "./AddStoreModal";
+import { ScanBarcodeModal } from "./ScanBarcodeModal";
 import { FRUIT_EXPIRY_DATABASE } from "../../utils/fruitExpiryHelper";
+import { getImageUrl } from "../../api/client";
 
 export function RecordPriceModal({
   isOpen,
@@ -16,6 +18,10 @@ export function RecordPriceModal({
   const [categories, setCategories] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
   const [productSuggestions, setProductSuggestions] = useState([]);
+  const [barcode, setBarcode] = useState(existingProduct?.barcode || "");
+  const [imageUrl, setImageUrl] = useState(existingProduct?.image_url || "");
+  const [isBarcodeScanOpen, setIsBarcodeScanOpen] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Entry info
   const [storeId, setStoreId] = useState("");
@@ -119,6 +125,8 @@ export function RecordPriceModal({
       setName(existingProduct.name);
       setCategoryId(existingProduct.category_id || "");
       setPurchaseUnit(existingProduct.base_unit || "pcs");
+      setBarcode(existingProduct.barcode || "");
+      setImageUrl(existingProduct.image_url || "");
     } else {
       setName("");
       setCategoryId("");
@@ -126,6 +134,8 @@ export function RecordPriceModal({
       setPriceTotal("");
       setDiscountValue("");
       setUnitsPerPackage("");
+      setBarcode("");
+      setImageUrl("");
     }
   }, [isOpen, existingProduct]);
 
@@ -174,7 +184,36 @@ export function RecordPriceModal({
     setName(p.name);
     setCategoryId(p.category_id || "");
     setPurchaseUnit(p.base_unit || "pcs");
+    if (p.barcode) setBarcode(p.barcode);
+    if (p.image_url) setImageUrl(p.image_url);
     setProductSuggestions([]);
+  };
+
+  const handleBarcodeScanned = (scannedCode) => {
+    setBarcode(scannedCode);
+    const match = allProducts.find(
+      (p) => (p.barcode && p.barcode.toLowerCase() === scannedCode.toLowerCase())
+    );
+    if (match) {
+      setName(match.name);
+      setCategoryId(match.category_id || "");
+      setPurchaseUnit(match.base_unit || "pcs");
+      if (match.image_url) setImageUrl(match.image_url);
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const res = await api.uploadImage(file);
+      if (res.url) setImageUrl(res.url);
+    } catch (err) {
+      alert("Gagal mengunggah gambar: " + err.message);
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   // Auto calculate estimated expiry when category or storage type changes
@@ -266,6 +305,8 @@ export function RecordPriceModal({
           name: name.trim(),
           category_id: categoryId ? parseInt(categoryId, 10) : null,
           base_unit: isPackagingUnit ? "pcs" : purchaseUnit,
+          barcode: barcode.trim(),
+          image_url: imageUrl.trim(),
           ...payload,
         });
       }
@@ -323,9 +364,21 @@ export function RecordPriceModal({
             {/* Product Name & Category */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="relative">
-                <label className="block text-xs font-semibold text-outline-variant uppercase tracking-wider mb-1">
-                  Nama Barang *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-outline-variant uppercase tracking-wider">
+                    Nama Barang *
+                  </label>
+                  {!existingProduct && (
+                    <button
+                      type="button"
+                      onClick={() => setIsBarcodeScanOpen(true)}
+                      className="text-[11px] font-bold text-primary hover:text-primary/80 flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">barcode_scanner</span>
+                      <span>Scan Barcode</span>
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
@@ -335,6 +388,13 @@ export function RecordPriceModal({
                   placeholder="Contoh: Telur Ayam Negeri, Apel Fuji"
                   className="w-full bg-surface-container-highest/60 border border-outline-variant/30 rounded-xl px-3.5 py-2.5 text-xs text-on-surface placeholder:text-outline-variant focus:outline-none focus:border-primary/80 transition-colors disabled:opacity-60"
                 />
+
+                {barcode && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[10px] text-primary">
+                    <span className="material-symbols-outlined text-[13px]">qr_code</span>
+                    <span>Barcode: <strong>{barcode}</strong></span>
+                  </div>
+                )}
 
                 {/* Suggestions Dropdown */}
                 {productSuggestions.length > 0 && (
@@ -706,6 +766,15 @@ export function RecordPriceModal({
             setAddressText(newStore.address_text || newStore.name);
           }
         }}
+      />
+
+      {/* Barcode Scanner Modal */}
+      <ScanBarcodeModal
+        isOpen={isBarcodeScanOpen}
+        onClose={() => setIsBarcodeScanOpen(false)}
+        onScan={handleBarcodeScanned}
+        title="Pindai Barcode Produk"
+        description="Arahkan kamera ke barcode kemasan barang"
       />
     </>
   );

@@ -277,6 +277,9 @@ type PriceProduct struct {
 	Name               string       `json:"name"`
 	NameNormalized     string       `json:"name_normalized"`
 	BaseUnit           string       `json:"base_unit"` // pcs, kg, liter, gram
+	ImageURL           string       `json:"image_url,omitempty"`
+	Barcode            string       `json:"barcode,omitempty"`
+	Notes              string       `json:"notes,omitempty"`
 	LastPricePerUnit   float64      `json:"last_price_per_unit,omitempty"`
 	MinPricePerUnit    float64      `json:"min_price_per_unit,omitempty"`
 	MaxPricePerUnit    float64      `json:"max_price_per_unit,omitempty"`
@@ -336,6 +339,7 @@ type PriceSettings struct {
 
 type PriceCheckRequest struct {
 	ProductName     string   `json:"product_name"`
+	Barcode         string   `json:"barcode,omitempty"`
 	PurchaseUnit    string   `json:"purchase_unit"`
 	PurchaseQty     float64  `json:"purchase_qty"`
 	UnitsPerPackage *float64 `json:"units_per_package,omitempty"`

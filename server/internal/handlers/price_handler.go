@@ -130,12 +130,35 @@ func computeEntryTotals(purchaseQty float64, purchaseUnit string, unitsPerPkg *f
 func (h *PriceHandler) GetStores(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 
-	rows, err := h.db.Query(`
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		q = strings.TrimSpace(r.URL.Query().Get("search"))
+	}
+	limitStr := r.URL.Query().Get("limit")
+
+	query := `
 		SELECT id, user_id, name, store_type, COALESCE(address_text, ''), lat, lng, is_mobile, public_store_id, created_at
 		FROM stores
 		WHERE user_id = ?
-		ORDER BY name ASC
-	`, userID)
+	`
+	args := []interface{}{userID}
+
+	if q != "" {
+		query += " AND name LIKE ?"
+		args = append(args, "%"+q+"%")
+	}
+
+	if limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			query += fmt.Sprintf(" ORDER BY id DESC LIMIT %d", limit)
+		} else {
+			query += " ORDER BY name ASC"
+		}
+	} else {
+		query += " ORDER BY name ASC"
+	}
+
+	rows, err := h.db.Query(query, args...)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Gagal mengambil daftar toko: "+err.Error())
 		return
@@ -314,17 +337,24 @@ func (h *PriceHandler) GetPriceProducts(w http.ResponseWriter, r *http.Request) 
 
 	query := `
 		SELECT p.id, p.user_id, p.category_id, COALESCE(c.name, 'Lainnya') as category_name,
-		       p.canonical_product_id, p.name, p.name_normalized, p.base_unit, p.created_at
+		       p.canonical_product_id, p.name, p.name_normalized, p.base_unit,
+		       COALESCE(p.image_url, ''), COALESCE(p.barcode, ''), COALESCE(p.notes, ''), p.created_at
 		FROM price_products p
 		LEFT JOIN product_categories c ON p.category_id = c.id
 		WHERE p.user_id = ?
 	`
 	args := []interface{}{userID}
 
+	barcode := strings.TrimSpace(r.URL.Query().Get("barcode"))
+	if barcode != "" {
+		query += " AND p.barcode = ?"
+		args = append(args, barcode)
+	}
+
 	if q != "" {
 		qNorm := "%" + normalizeProductName(q) + "%"
-		query += " AND (p.name_normalized LIKE ? OR p.name LIKE ?)"
-		args = append(args, qNorm, "%"+q+"%")
+		query += " AND (p.name_normalized LIKE ? OR p.name LIKE ? OR p.barcode LIKE ?)"
+		args = append(args, qNorm, "%"+q+"%", "%"+q+"%")
 	}
 
 	if catIDStr != "" {
@@ -336,6 +366,13 @@ func (h *PriceHandler) GetPriceProducts(w http.ResponseWriter, r *http.Request) 
 
 	query += " ORDER BY p.id DESC"
 
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			query += fmt.Sprintf(" LIMIT %d", limit)
+		}
+	}
+
 	rows, err := h.db.Query(query, args...)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Gagal mengambil daftar produk: "+err.Error())
@@ -346,7 +383,10 @@ func (h *PriceHandler) GetPriceProducts(w http.ResponseWriter, r *http.Request) 
 	products := make([]models.PriceProduct, 0)
 	for rows.Next() {
 		var p models.PriceProduct
-		if err := rows.Scan(&p.ID, &p.UserID, &p.CategoryID, &p.CategoryName, &p.CanonicalProductID, &p.Name, &p.NameNormalized, &p.BaseUnit, &p.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&p.ID, &p.UserID, &p.CategoryID, &p.CategoryName, &p.CanonicalProductID,
+			&p.Name, &p.NameNormalized, &p.BaseUnit, &p.ImageURL, &p.Barcode, &p.Notes, &p.CreatedAt,
+		); err != nil {
 			continue
 		}
 		products = append(products, p)
@@ -436,9 +476,12 @@ func (h *PriceHandler) CreatePriceProduct(w http.ResponseWriter, r *http.Request
 
 	var req struct {
 		// Product info
-		Name       string `json:"name"`
-		CategoryID *int   `json:"category_id"`
-		BaseUnit   string `json:"base_unit"`
+		Name         string `json:"name"`
+		CategoryID   *int   `json:"category_id"`
+		BaseUnit     string `json:"base_unit"`
+		ImageURL     string `json:"image_url"`
+		Barcode      string `json:"barcode"`
+		ProductNotes string `json:"product_notes"`
 
 		// Initial Entry info
 		StoreID           *int     `json:"store_id"`
@@ -500,14 +543,24 @@ func (h *PriceHandler) CreatePriceProduct(w http.ResponseWriter, r *http.Request
 	}
 
 	normName := normalizeProductName(req.Name)
+	cleanBarcode := strings.TrimSpace(req.Barcode)
 
-	// Check if product with this normalized name already exists for this user
+	// Check if product with this barcode or normalized name already exists for this user
 	var productID int
-	err := h.db.QueryRow(`
-		SELECT id FROM price_products
-		WHERE user_id = ? AND name_normalized = ?
-		LIMIT 1
-	`, userID, normName).Scan(&productID)
+	var err error
+	if cleanBarcode != "" {
+		err = h.db.QueryRow(`
+			SELECT id FROM price_products
+			WHERE user_id = ? AND (barcode = ? OR name_normalized = ?)
+			LIMIT 1
+		`, userID, cleanBarcode, normName).Scan(&productID)
+	} else {
+		err = h.db.QueryRow(`
+			SELECT id FROM price_products
+			WHERE user_id = ? AND name_normalized = ?
+			LIMIT 1
+		`, userID, normName).Scan(&productID)
+	}
 
 	if err != nil && err != sql.ErrNoRows {
 		utils.JSONError(w, http.StatusInternalServerError, "Gagal memeriksa produk: "+err.Error())
@@ -517,14 +570,22 @@ func (h *PriceHandler) CreatePriceProduct(w http.ResponseWriter, r *http.Request
 	// If not exists, insert product
 	if err == sql.ErrNoRows {
 		newPID, insErr := h.db.Insert(`
-			INSERT INTO price_products (user_id, category_id, canonical_product_id, name, name_normalized, base_unit, created_at)
-			VALUES (?, ?, NULL, ?, ?, ?, CURRENT_TIMESTAMP)
-		`, userID, req.CategoryID, req.Name, normName, req.BaseUnit)
+			INSERT INTO price_products (user_id, category_id, canonical_product_id, name, name_normalized, base_unit, image_url, barcode, notes, created_at)
+			VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`, userID, req.CategoryID, req.Name, normName, req.BaseUnit, req.ImageURL, cleanBarcode, req.ProductNotes)
 		if insErr != nil {
 			utils.JSONError(w, http.StatusInternalServerError, "Gagal membuat produk: "+insErr.Error())
 			return
 		}
 		productID = int(newPID)
+	} else if req.ImageURL != "" || cleanBarcode != "" {
+		// Update image or barcode if previously empty
+		_, _ = h.db.Exec(`
+			UPDATE price_products
+			SET image_url = CASE WHEN (image_url IS NULL OR image_url = '') THEN ? ELSE image_url END,
+			    barcode = CASE WHEN (barcode IS NULL OR barcode = '') THEN ? ELSE barcode END
+			WHERE id = ? AND user_id = ?
+		`, req.ImageURL, cleanBarcode, productID, userID)
 	}
 
 	// Insert Price Entry
@@ -576,11 +637,15 @@ func (h *PriceHandler) GetPriceProductDetail(w http.ResponseWriter, r *http.Requ
 	var p models.PriceProduct
 	err = h.db.QueryRow(`
 		SELECT p.id, p.user_id, p.category_id, COALESCE(c.name, 'Lainnya') as category_name,
-		       p.canonical_product_id, p.name, p.name_normalized, p.base_unit, p.created_at
+		       p.canonical_product_id, p.name, p.name_normalized, p.base_unit,
+		       COALESCE(p.image_url, ''), COALESCE(p.barcode, ''), COALESCE(p.notes, ''), p.created_at
 		FROM price_products p
 		LEFT JOIN product_categories c ON p.category_id = c.id
 		WHERE p.id = ? AND p.user_id = ?
-	`, productID, userID).Scan(&p.ID, &p.UserID, &p.CategoryID, &p.CategoryName, &p.CanonicalProductID, &p.Name, &p.NameNormalized, &p.BaseUnit, &p.CreatedAt)
+	`, productID, userID).Scan(
+		&p.ID, &p.UserID, &p.CategoryID, &p.CategoryName, &p.CanonicalProductID,
+		&p.Name, &p.NameNormalized, &p.BaseUnit, &p.ImageURL, &p.Barcode, &p.Notes, &p.CreatedAt,
+	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -796,6 +861,64 @@ func (h *PriceHandler) DeletePriceProduct(w http.ResponseWriter, r *http.Request
 	utils.JSON(w, http.StatusOK, map[string]interface{}{"message": "Produk dan riwayat harga berhasil dihapus"})
 }
 
+// UpdatePriceProduct updates product details: name, category, unit, image, barcode, notes
+func (h *PriceHandler) UpdatePriceProduct(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	idStr := chi.URLParam(r, "id")
+	productID, err := strconv.Atoi(idStr)
+	if err != nil {
+		utils.JSONError(w, http.StatusBadRequest, "ID produk tidak valid")
+		return
+	}
+
+	var req struct {
+		Name       string `json:"name"`
+		CategoryID *int   `json:"category_id"`
+		BaseUnit   string `json:"base_unit"`
+		ImageURL   string `json:"image_url"`
+		Barcode    string `json:"barcode"`
+		Notes      string `json:"notes"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, "Format JSON tidak valid: "+err.Error())
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		utils.JSONError(w, http.StatusBadRequest, "Nama barang tidak boleh kosong")
+		return
+	}
+	if req.BaseUnit == "" {
+		req.BaseUnit = "pcs"
+	}
+
+	normName := normalizeProductName(req.Name)
+	cleanBarcode := strings.TrimSpace(req.Barcode)
+
+	res, err := h.db.Exec(`
+		UPDATE price_products
+		SET name = ?, name_normalized = ?, category_id = ?, base_unit = ?, image_url = ?, barcode = ?, notes = ?
+		WHERE id = ? AND user_id = ?
+	`, req.Name, normName, req.CategoryID, req.BaseUnit, req.ImageURL, cleanBarcode, req.Notes, productID, userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Gagal memperbarui produk: "+err.Error())
+		return
+	}
+
+	rowsAff, _ := res.RowsAffected()
+	if rowsAff == 0 {
+		utils.JSONError(w, http.StatusNotFound, "Produk tidak ditemukan atau tidak memiliki hak akses")
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Detail produk berhasil diperbarui",
+		"id":      productID,
+	})
+}
+
 // =============================================================================
 // PRICE CHECK CALCULATOR (Cek Sebelum Belanja)
 // =============================================================================
@@ -810,8 +933,26 @@ func (h *PriceHandler) PriceCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.ProductName = strings.TrimSpace(req.ProductName)
+	cleanBarcode := strings.TrimSpace(req.Barcode)
+
+	// If product name is empty but barcode is provided, lookup product name & base unit
+	if req.ProductName == "" && cleanBarcode != "" {
+		var pName, pUnit string
+		err := h.db.QueryRow(`
+			SELECT name, base_unit FROM price_products
+			WHERE user_id = ? AND barcode = ?
+			LIMIT 1
+		`, userID, cleanBarcode).Scan(&pName, &pUnit)
+		if err == nil {
+			req.ProductName = pName
+			if req.PurchaseUnit == "" || req.PurchaseUnit == "pcs" {
+				req.PurchaseUnit = pUnit
+			}
+		}
+	}
+
 	if req.ProductName == "" {
-		utils.JSONError(w, http.StatusBadRequest, "Nama barang wajib diisi untuk cek harga")
+		utils.JSONError(w, http.StatusBadRequest, "Nama barang atau barcode wajib diisi untuk cek harga")
 		return
 	}
 	if req.PurchaseQty <= 0 {

@@ -241,6 +241,9 @@ func migrateSchema(db *sql.DB, driver string) error {
 			name TEXT NOT NULL,
 			name_normalized TEXT NOT NULL,
 			base_unit TEXT NOT NULL DEFAULT 'pcs',
+			image_url TEXT,
+			barcode TEXT,
+			notes TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 
@@ -481,6 +484,9 @@ func migrateSchema(db *sql.DB, driver string) error {
 			name VARCHAR(200) NOT NULL,
 			name_normalized VARCHAR(200) NOT NULL,
 			base_unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
+			image_url TEXT,
+			barcode VARCHAR(100),
+			notes TEXT,
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		);
 
@@ -548,8 +554,14 @@ func migrateSchema(db *sql.DB, driver string) error {
 		_, _ = db.Exec("ALTER TABLE wallets ADD COLUMN IF NOT EXISTS credit_limit DOUBLE PRECISION DEFAULT 0.0;")
 		_, _ = db.Exec("ALTER TABLE debts ADD COLUMN IF NOT EXISTS wallet_id INTEGER REFERENCES wallets(id) ON DELETE SET NULL;")
 		_, _ = db.Exec("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS due_date VARCHAR(20);")
+		_, _ = db.Exec("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS deleted INTEGER DEFAULT 0;")
+		_, _ = db.Exec("UPDATE transactions SET deleted = 0 WHERE deleted IS NULL;")
 		_, _ = db.Exec("ALTER TABLE radar_items ADD COLUMN IF NOT EXISTS qty INTEGER DEFAULT 1;")
 		_, _ = db.Exec("ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS price DOUBLE PRECISION DEFAULT 0.0;")
+		_, _ = db.Exec("ALTER TABLE price_products ADD COLUMN IF NOT EXISTS image_url TEXT;")
+		_, _ = db.Exec("ALTER TABLE price_products ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);")
+		_, _ = db.Exec("ALTER TABLE price_products ADD COLUMN IF NOT EXISTS notes TEXT;")
+		_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_price_products_barcode ON price_products(user_id, barcode);")
 		_, _ = db.Exec(`
 			CREATE TABLE IF NOT EXISTS email_verifications (
 				id SERIAL PRIMARY KEY,
@@ -587,8 +599,13 @@ func migrateSchema(db *sql.DB, driver string) error {
 		_, _ = db.Exec("ALTER TABLE wallets ADD COLUMN credit_limit REAL DEFAULT 0.0;")
 		_, _ = db.Exec("ALTER TABLE debts ADD COLUMN wallet_id INTEGER REFERENCES wallets(id) ON DELETE SET NULL;")
 		_, _ = db.Exec("ALTER TABLE transactions ADD COLUMN due_date TEXT;")
+		_, _ = db.Exec("ALTER TABLE transactions ADD COLUMN deleted INTEGER DEFAULT 0;")
 		_, _ = db.Exec("ALTER TABLE radar_items ADD COLUMN qty INTEGER DEFAULT 1;")
 		_, _ = db.Exec("ALTER TABLE pantry_items ADD COLUMN price REAL DEFAULT 0.0;")
+		_, _ = db.Exec("ALTER TABLE price_products ADD COLUMN image_url TEXT;")
+		_, _ = db.Exec("ALTER TABLE price_products ADD COLUMN barcode TEXT;")
+		_, _ = db.Exec("ALTER TABLE price_products ADD COLUMN notes TEXT;")
+		_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_price_products_barcode ON price_products(user_id, barcode);")
 		_, _ = db.Exec(`
 			CREATE TABLE IF NOT EXISTS email_verifications (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,

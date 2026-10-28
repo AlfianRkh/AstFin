@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { api } from "../../api/client";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { api, getImageUrl } from "../../api/client";
+import { ScanBarcodeModal } from "./ScanBarcodeModal";
+import { AddStoreModal } from "./AddStoreModal";
 
 const DEFAULT_EXPENSE_CATEGORIES = [
   "Belanja Dapur & Groceries",
@@ -21,6 +23,41 @@ const DEFAULT_INCOME_CATEGORIES = [
   "Investasi & Dividen",
 ];
 
+const PACKAGING_UNITS = [
+  "kardus", "pack", "dus", "lusin", "renceng", "tray", "karton", "box", "ikat"
+];
+
+const STORE_TYPE_LABELS = {
+  minimarket: "Minimarket",
+  supermarket: "Supermarket",
+  pasar: "Pasar",
+  tukang_sayur: "Tukang Sayur",
+  grosir: "Grosir",
+  warung: "Warung",
+  online: "Online",
+};
+
+const getStoreIcon = (stType) => {
+  switch (stType) {
+    case "minimarket":
+      return "shopping_cart";
+    case "supermarket":
+      return "domain";
+    case "pasar":
+      return "storefront";
+    case "tukang_sayur":
+      return "local_shipping";
+    case "grosir":
+      return "inventory";
+    case "warung":
+      return "store";
+    case "online":
+      return "language";
+    default:
+      return "storefront";
+  }
+};
+
 export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = null, onOpenWallet = null }) {
   const [wallets, setWallets] = useState([]);
   const [walletId, setWalletId] = useState("");
@@ -32,6 +69,11 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
   const [saveCategoryToDb, setSaveCategoryToDb] = useState(true);
   const [savedCategories, setSavedCategories] = useState([]);
   const [merchant, setMerchant] = useState("");
+  const [stores, setStores] = useState([]);
+  const [loadingStores, setLoadingStores] = useState(false);
+  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [isCustomStore, setIsCustomStore] = useState(false);
+  const [isAddStoreOpen, setIsAddStoreOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState(() => {
@@ -40,6 +82,42 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
     return nextMonth.toISOString().split("T")[0];
   });
   const [loading, setLoading] = useState(false);
+
+  // Product Selection & New Product Creation state (Khusus Belanja / Pengeluaran)
+  const [productList, setProductList] = useState([]);
+  const [productCategories, setProductCategories] = useState([]);
+  const [productSelectionMode, setProductSelectionMode] = useState("manual"); // "catalog" | "manual"
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedProductObj, setSelectedProductObj] = useState(null);
+  const [productQty, setProductQty] = useState(1);
+  const [manualProductName, setManualProductName] = useState("");
+  const [saveAsNewProduct, setSaveAsNewProduct] = useState(false);
+  const [newProductData, setNewProductData] = useState({
+    category_id: "",
+    purchase_unit: "pcs",
+    purchase_qty: 1,
+    units_per_package: "",
+    discount_type: "amount", // "amount" | "percent"
+    discount_value: "",
+    storage_type: "room", // "room" | "chiller" | "freezer"
+    expiry_date: "",
+    expiry_is_estimated: false,
+    barcode: "",
+    image_url: "",
+    notes: "",
+  });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [isBarcodeScanOpen, setIsBarcodeScanOpen] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Search & Debounce state (Limit 10 Product, Debounce 3 detik)
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [productSearchResults, setProductSearchResults] = useState([]);
+  const [isSearchingProduct, setIsSearchingProduct] = useState(false);
+  const [isDebouncingProductSearch, setIsDebouncingProductSearch] = useState(false);
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const searchDebounceTimerRef = useRef(null);
+  const productSearchContainerRef = useRef(null);
 
   // Fetch wallets from database
   const fetchWallets = useCallback(async () => {
@@ -91,12 +169,102 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
     }
   }, []);
 
-  // When modal opens or initialData changes
+  // Fetch product catalog & product categories from database
+  const fetchProductsAndCategories = useCallback(async () => {
+    try {
+      const [prodsRes, catsRes] = await Promise.all([
+        api.getPriceProducts(),
+        api.getPriceCategories(),
+      ]);
+      setProductList(Array.isArray(prodsRes?.data) ? prodsRes.data : []);
+      setProductCategories(Array.isArray(catsRes?.data) ? catsRes.data : []);
+    } catch (err) {
+      console.warn("Gagal memuat katalog produk:", err);
+    }
+  }, []);
+
+  // Fetch 10 toko default dari database untuk dropdown
+  const fetchStores = useCallback(async () => {
+    setLoadingStores(true);
+    try {
+      const res = await api.getStores({ limit: 10 });
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      setStores(list.slice(0, 10));
+    } catch (err) {
+      console.warn("Gagal memuat 10 toko dari database:", err);
+    } finally {
+      setLoadingStores(false);
+    }
+  }, []);
+
+  const handleStoreCreated = (newStore) => {
+    if (!newStore) return;
+    setStores((prev) => [newStore, ...prev.filter((s) => s.id !== newStore.id)].slice(0, 10));
+    setSelectedStoreId(String(newStore.id));
+    setMerchant(newStore.name);
+    setIsCustomStore(false);
+  };
+
+  // Fetch 10 produk terbaru untuk pencarian cepat
+  const fetchRecentProducts = useCallback(async () => {
+    try {
+      setIsSearchingProduct(true);
+      const res = await api.getPriceProducts({ limit: 10 });
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setProductSearchResults(list);
+    } catch (err) {
+      console.warn("Gagal memuat 10 produk terbaru:", err);
+    } finally {
+      setIsSearchingProduct(false);
+    }
+  }, []);
+
+  // Tutup dropdown pencarian produk saat klik di luar
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        productSearchContainerRef.current &&
+        !productSearchContainerRef.current.contains(event.target)
+      ) {
+        setIsProductDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Auto calculate estimated expiry date ketika kategori produk atau suhu penyimpanan dipilih
+  useEffect(() => {
+    if (!newProductData.category_id) return;
+    const cat = productCategories.find((c) => String(c.id) === String(newProductData.category_id));
+    if (cat) {
+      let days = 7;
+      if (newProductData.storage_type === "room") days = cat.shelf_life_room_days || 3;
+      if (newProductData.storage_type === "chiller") days = cat.shelf_life_chiller_days || 7;
+      if (newProductData.storage_type === "freezer") days = cat.shelf_life_freezer_days || 30;
+
+      if (days > 0) {
+        const d = new Date(date || new Date());
+        d.setDate(d.getDate() + days);
+        setNewProductData((prev) => ({
+          ...prev,
+          expiry_date: d.toISOString().split("T")[0],
+          expiry_is_estimated: true,
+        }));
+      }
+    }
+  }, [newProductData.category_id, newProductData.storage_type, date, productCategories]);
+
   // When modal opens or initialData changes
   useEffect(() => {
     if (isOpen) {
       fetchWallets();
       fetchCategories();
+      fetchProductsAndCategories();
+      fetchRecentProducts();
+      fetchStores();
 
       if (initialData) {
         if (initialData.type) setType(initialData.type);
@@ -114,10 +282,37 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
         setCustomCategory("");
         setAmount("");
         setMerchant("");
+        setSelectedStoreId("");
+        setIsCustomStore(false);
         setNotes("");
+        setSelectedProductId("");
+        setSelectedProductObj(null);
+        setManualProductName("");
+        setSaveAsNewProduct(false);
+        setProductQty(1);
+        setProductSearchQuery("");
+        setIsProductDropdownOpen(false);
+        setIsDebouncingProductSearch(false);
+        if (searchDebounceTimerRef.current) {
+          clearTimeout(searchDebounceTimerRef.current);
+        }
+        setNewProductData({
+          category_id: "",
+          purchase_unit: "pcs",
+          purchase_qty: 1,
+          units_per_package: "",
+          discount_type: "amount",
+          discount_value: "",
+          storage_type: "room",
+          expiry_date: "",
+          expiry_is_estimated: false,
+          barcode: "",
+          image_url: "",
+          notes: "",
+        });
       }
     }
-  }, [isOpen, initialData, fetchWallets, fetchCategories]);
+  }, [isOpen, initialData, fetchWallets, fetchCategories, fetchProductsAndCategories, fetchRecentProducts, fetchStores]);
 
   const isFromRadar = Boolean(initialData?.fromRadar || initialData?.lockType);
   const radarProduct = initialData?.radarProduct;
@@ -143,7 +338,169 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
     setCategory(newType === "expense" ? DEFAULT_EXPENSE_CATEGORIES[0] : DEFAULT_INCOME_CATEGORIES[0]);
     setCustomCategory("");
     setSaveCategoryToDb(true);
+    setSelectedProductId("");
+    setSelectedProductObj(null);
+    setManualProductName("");
+    setSaveAsNewProduct(false);
   };
+
+  // Handle focus pada input search produk: jika belum input kata, muat 10 produk terbaru
+  const handleProductSearchFocus = () => {
+    setIsProductDropdownOpen(true);
+    if (!productSearchQuery.trim()) {
+      fetchRecentProducts();
+    }
+  };
+
+  // Handle perubahan input search produk dengan jeda/debounce 3 detik
+  const handleProductSearchChange = (e) => {
+    const val = e.target.value;
+    setProductSearchQuery(val);
+    setIsProductDropdownOpen(true);
+
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+    }
+
+    if (!val.trim()) {
+      setIsDebouncingProductSearch(false);
+      fetchRecentProducts();
+      return;
+    }
+
+    // Jeda 3 detik jika tidak ada perubahan inputan maka jalankan query search limit 10
+    setIsDebouncingProductSearch(true);
+    searchDebounceTimerRef.current = setTimeout(async () => {
+      setIsDebouncingProductSearch(false);
+      setIsSearchingProduct(true);
+      try {
+        const res = await api.getPriceProducts({ q: val.trim(), limit: 10 });
+        setProductSearchResults(Array.isArray(res?.data) ? res.data : []);
+      } catch (err) {
+        console.warn("Gagal mencari produk:", err);
+      } finally {
+        setIsSearchingProduct(false);
+      }
+    }, 3000);
+  };
+
+  // Handler memilih produk dari dropdown hasil search limit 10
+  const handleSelectProductItem = (chosen) => {
+    if (!chosen) return;
+    setSelectedProductId(String(chosen.id));
+    setSelectedProductObj(chosen);
+    setIsProductDropdownOpen(false);
+    setProductSearchQuery("");
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+    }
+    setIsDebouncingProductSearch(false);
+
+    if (chosen.last_price_per_unit > 0) {
+      setAmount(String(chosen.last_price_per_unit * productQty));
+    }
+    if (chosen.cheapest_store_name && !merchant) {
+      setMerchant(chosen.cheapest_store_name);
+    }
+    setNotes(`${chosen.name} (${productQty} ${chosen.base_unit || "pcs"})`);
+    if (category === DEFAULT_EXPENSE_CATEGORIES[0]) {
+      setCategory("Belanja Dapur & Groceries");
+    }
+  };
+
+  const handleDeselectProduct = () => {
+    setSelectedProductId("");
+    setSelectedProductObj(null);
+  };
+
+  const handleSwitchToManual = (initialName = "") => {
+    setProductSelectionMode("manual");
+    setSelectedProductId("");
+    setSelectedProductObj(null);
+    setIsProductDropdownOpen(false);
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+    }
+    setIsDebouncingProductSearch(false);
+    if (initialName) {
+      setManualProductName(initialName);
+      if (!notes) setNotes(initialName);
+    }
+    setSaveAsNewProduct(true);
+  };
+
+  const handleProductQtyChange = (qty) => {
+    const clamped = Math.max(1, qty);
+    setProductQty(clamped);
+    const chosen = selectedProductObj || productList.find((p) => String(p.id) === String(selectedProductId)) || productSearchResults.find((p) => String(p.id) === String(selectedProductId));
+    if (chosen && chosen.last_price_per_unit > 0) {
+      setAmount(String(chosen.last_price_per_unit * clamped));
+      setNotes(`${chosen.name} (${clamped} ${chosen.base_unit || "pcs"})`);
+    }
+  };
+
+  // Handler for uploading product photo
+  const handleProductImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const res = await api.uploadImage(file);
+      if (res.url) {
+        setNewProductData((prev) => ({ ...prev, image_url: res.url }));
+      }
+    } catch (err) {
+      alert("Gagal mengunggah foto produk: " + err.message);
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // Konversi Kemasan & Harga Satuan untuk Produk Baru (Input Manual)
+  const isNewProductPackaging = useMemo(() => {
+    return PACKAGING_UNITS.includes((newProductData.purchase_unit || "pcs").toLowerCase());
+  }, [newProductData.purchase_unit]);
+
+  const numericNewProductQty = useMemo(() => {
+    return Math.max(0.01, parseFloat(newProductData.purchase_qty) || 1);
+  }, [newProductData.purchase_qty]);
+
+  const numericUnitsPerPkg = useMemo(() => {
+    return parseFloat(newProductData.units_per_package) || 0;
+  }, [newProductData.units_per_package]);
+
+  const calculatedNewProductTotalUnits = useMemo(() => {
+    if (isNewProductPackaging && numericUnitsPerPkg > 0) {
+      return numericNewProductQty * numericUnitsPerPkg;
+    }
+    if ((newProductData.purchase_unit || "").toLowerCase() === "lusin") {
+      return numericNewProductQty * (numericUnitsPerPkg > 0 ? numericUnitsPerPkg : 12);
+    }
+    return numericNewProductQty;
+  }, [isNewProductPackaging, numericUnitsPerPkg, numericNewProductQty, newProductData.purchase_unit]);
+
+  // Kalkulasi Diskon & Harga Satuan Bersih (Net)
+  const numericPriceTotal = parseFloat(amount) || 0;
+  const numericDiscountVal = parseFloat(newProductData.discount_value) || 0;
+
+  const calculatedDiscountAmount = useMemo(() => {
+    if (newProductData.discount_type === "percent") {
+      return numericPriceTotal * (Math.min(numericDiscountVal, 100) / 100);
+    }
+    return Math.min(numericDiscountVal, numericPriceTotal);
+  }, [numericPriceTotal, newProductData.discount_type, numericDiscountVal]);
+
+  const calculatedPriceFinal = useMemo(() => {
+    return Math.max(0, numericPriceTotal - calculatedDiscountAmount);
+  }, [numericPriceTotal, calculatedDiscountAmount]);
+
+  const calculatedPricePerUnit = useMemo(() => {
+    if (calculatedNewProductTotalUnits > 0 && calculatedPriceFinal > 0) {
+      return calculatedPriceFinal / calculatedNewProductTotalUnits;
+    }
+    return 0;
+  }, [calculatedPriceFinal, calculatedNewProductTotalUnits]);
 
   // Build the list of categories dynamically based on type
   const availableCategories = useMemo(() => {
@@ -287,6 +644,61 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
 
     setLoading(true);
     try {
+      // 1. Jika mode manual dan user mencentang 'Simpan Product', simpan produk baru ke katalog
+      if (type === "expense" && productSelectionMode === "manual" && saveAsNewProduct && manualProductName.trim()) {
+        try {
+          const isPackaging = PACKAGING_UNITS.includes((newProductData.purchase_unit || "pcs").toLowerCase());
+          const pQty = Math.max(0.01, parseFloat(newProductData.purchase_qty) || 1);
+          let uPkg = parseFloat(newProductData.units_per_package);
+          if ((!uPkg || uPkg <= 0) && (newProductData.purchase_unit || "").toLowerCase() === "lusin") {
+            uPkg = 12;
+          }
+
+          await api.createPriceProduct({
+            name: manualProductName.trim(),
+            category_id: newProductData.category_id ? parseInt(newProductData.category_id, 10) : null,
+            base_unit: isPackaging ? "pcs" : (newProductData.purchase_unit || "pcs"),
+            barcode: newProductData.barcode.trim(),
+            image_url: newProductData.image_url.trim(),
+            product_notes: newProductData.notes.trim(),
+            purchase_unit: newProductData.purchase_unit || "pcs",
+            purchase_qty: pQty,
+            units_per_package: isPackaging && uPkg > 0 ? uPkg : null,
+            price_total: parseFloat(amount) || 0,
+            discount_type: newProductData.discount_type || "amount",
+            discount_value: parseFloat(newProductData.discount_value) || 0,
+            storage_type: newProductData.storage_type || "room",
+            expiry_date: newProductData.expiry_date || null,
+            expiry_is_estimated: Boolean(newProductData.expiry_is_estimated),
+            store_id: selectedStoreId ? parseInt(selectedStoreId, 10) : null,
+            address_text: merchant.trim(),
+            entry_type: "purchase",
+            observed_at: date,
+          });
+        } catch (errProd) {
+          console.warn("Gagal menyimpan produk baru ke database:", errProd);
+        }
+      }
+
+      // 2. Jika mode katalog dan produk dipilih, catat entri harga ke produk tersebut
+      if (type === "expense" && productSelectionMode === "catalog" && selectedProductId) {
+        try {
+          const chosen = selectedProductObj || productList.find((p) => String(p.id) === String(selectedProductId)) || productSearchResults.find((p) => String(p.id) === String(selectedProductId));
+          if (chosen) {
+            await api.addPriceEntry(chosen.id, {
+              store_id: selectedStoreId ? parseInt(selectedStoreId, 10) : null,
+              entry_type: "purchase",
+              purchase_unit: chosen.base_unit || "pcs",
+              purchase_qty: parseFloat(productQty) || 1,
+              price_total: parseFloat(amount) || 0,
+              address_text: merchant.trim(),
+              observed_at: date,
+            });
+          }
+        } catch (errEntry) {
+          console.warn("Gagal menambahkan entri harga ke produk:", errEntry);
+        }
+      }
       await api.createTransaction({
         wallet_id: parseInt(walletId),
         type,
@@ -336,8 +748,8 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="bg-surface-container-high rounded-2xl max-w-md w-full p-6 shadow-2xl border border-surface-container-highest flex flex-col gap-4 text-on-surface max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-surface-container-high rounded-2xl w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl p-5 sm:p-6 shadow-2xl border border-surface-container-highest flex flex-col gap-4 text-on-surface max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-outline-variant/20 pb-3">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-[22px]">receipt_long</span>
@@ -776,6 +1188,633 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
             </div>
           )}
 
+          {/* Opsi Memilih Product dari List atau Input Manual (Khusus Pengeluaran) */}
+          {type === "expense" && !isFromRadar && (
+            <div className="bg-surface-container-low/70 p-3.5 rounded-xl border border-outline-variant/20 flex flex-col gap-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-on-surface">
+                  <span className="material-symbols-outlined text-primary text-[18px]">inventory_2</span>
+                  <span>Produk / Barang yang Dibeli (Opsional)</span>
+                </div>
+                {/* Mode Toggle: Search vs Manual */}
+                <div className="flex items-center p-0.5 bg-surface-container rounded-lg border border-outline-variant/20 text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductSelectionMode("catalog");
+                      setSaveAsNewProduct(false);
+                      fetchRecentProducts();
+                    }}
+                    className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                      productSelectionMode === "catalog"
+                        ? "bg-primary text-on-primary shadow-xs"
+                        : "text-outline hover:text-on-surface"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[13px]">search</span>
+                    <span>Cari Produk (Limit 10)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductSelectionMode("manual");
+                      setSelectedProductId("");
+                      setSelectedProductObj(null);
+                    }}
+                    className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                      productSelectionMode === "manual"
+                        ? "bg-primary text-on-primary shadow-xs"
+                        : "text-outline hover:text-on-surface"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[13px]">edit_note</span>
+                    <span>Input Manual</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Mode 1: Cari Produk dari Katalog (Search & Limit 10) */}
+              {productSelectionMode === "catalog" && (
+                <div className="space-y-2">
+                  {selectedProductId ? (
+                    (() => {
+                      const selectedProduct = selectedProductObj || productList.find((p) => String(p.id) === String(selectedProductId)) || productSearchResults.find((p) => String(p.id) === String(selectedProductId));
+                      if (!selectedProduct) return null;
+                      return (
+                        <div className="p-3 bg-primary/10 border border-primary/30 rounded-xl flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {selectedProduct.image_url ? (
+                              <img
+                                src={getImageUrl(selectedProduct.image_url)}
+                                alt={selectedProduct.name}
+                                className="w-11 h-11 rounded-lg object-cover border border-primary/30 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-lg bg-primary/20 flex items-center justify-center text-primary shrink-0">
+                                <span className="material-symbols-outlined text-2xl">shopping_basket</span>
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <span className="text-[10px] text-primary font-bold uppercase tracking-wider block">
+                                {selectedProduct.category_name || "Produk Katalog"}
+                              </span>
+                              <strong className="text-xs text-on-surface block truncate">
+                                {selectedProduct.name}
+                              </strong>
+                              <span className="text-[10px] text-outline block">
+                                Satuan: {selectedProduct.base_unit || "pcs"} {selectedProduct.last_price_per_unit > 0 ? `· Rp ${Number(selectedProduct.last_price_per_unit).toLocaleString("id-ID")}` : ""} {selectedProduct.cheapest_store_name ? `(${selectedProduct.cheapest_store_name})` : ""}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Qty Counter */}
+                            <div className="flex items-center bg-surface-container rounded-lg border border-outline-variant/30 p-0.5 text-xs">
+                              <button
+                                type="button"
+                                disabled={productQty <= 1}
+                                onClick={() => handleProductQtyChange(productQty - 1)}
+                                className="w-6 h-6 flex items-center justify-center text-on-surface hover:bg-surface-bright rounded disabled:opacity-30 transition-colors"
+                              >
+                                -
+                              </button>
+                              <span className="w-7 text-center font-bold text-primary text-[12px]">{productQty}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleProductQtyChange(productQty + 1)}
+                                className="w-6 h-6 flex items-center justify-center text-on-surface hover:bg-surface-bright rounded transition-colors"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleDeselectProduct}
+                              className="w-7 h-7 flex items-center justify-center text-outline hover:text-red-400 hover:bg-error-container/20 rounded-lg transition-colors"
+                              title="Ganti / Batal Pilih"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">close</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div ref={productSearchContainerRef} className="relative space-y-1.5">
+                      {/* Search Input Box */}
+                      <div className="relative flex items-center">
+                        <span className="material-symbols-outlined absolute left-3 text-outline text-[18px] pointer-events-none">
+                          search
+                        </span>
+                        <input
+                          type="text"
+                          value={productSearchQuery}
+                          onFocus={handleProductSearchFocus}
+                          onChange={handleProductSearchChange}
+                          placeholder="Cari nama produk (klik untuk 10 produk terbaru)..."
+                          className="w-full bg-surface-container rounded-lg pl-9 pr-28 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs font-medium placeholder:text-outline"
+                        />
+                        {/* Status Right Badge / Indicator */}
+                        <div className="absolute right-2 flex items-center gap-1.5">
+                          {isDebouncingProductSearch && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-secondary/15 text-secondary font-bold animate-pulse border border-secondary/30">
+                              <span className="material-symbols-outlined text-[12px]">timer</span>
+                              <span>Jeda 3 dtk...</span>
+                            </span>
+                          )}
+                          {isSearchingProduct && !isDebouncingProductSearch && (
+                            <span className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-1"></span>
+                          )}
+                          {productSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProductSearchQuery("");
+                                if (searchDebounceTimerRef.current) clearTimeout(searchDebounceTimerRef.current);
+                                setIsDebouncingProductSearch(false);
+                                fetchRecentProducts();
+                              }}
+                              className="text-outline hover:text-on-surface p-0.5"
+                              title="Hapus kata kunci"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">cancel</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Dropdown Popover List (Limit 10 Produk) */}
+                      {isProductDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-surface-container-high rounded-xl border border-outline-variant/40 shadow-2xl z-50 overflow-hidden animate-in fade-in duration-150">
+                          {/* Header info */}
+                          <div className="px-3 py-1.5 bg-surface-container border-b border-outline-variant/20 flex items-center justify-between text-[10px] text-outline font-semibold">
+                            <span className="flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px] text-primary">
+                                {productSearchQuery.trim() ? "search" : "history"}
+                              </span>
+                              <span>
+                                {productSearchQuery.trim()
+                                  ? `Hasil Pencarian (Maks. 10):`
+                                  : `10 Produk Terbaru:`}
+                              </span>
+                            </span>
+                            <span className="text-secondary font-bold">
+                              {productSearchResults.length} Item
+                            </span>
+                          </div>
+
+                          {/* List of items */}
+                          <div className="max-h-64 overflow-y-auto divide-y divide-outline-variant/10">
+                            {isSearchingProduct && productSearchResults.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-outline flex items-center justify-center gap-2">
+                                <span className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+                                <span>Memuat data produk...</span>
+                              </div>
+                            ) : productSearchResults.length === 0 ? (
+                              <div className="p-4 text-center space-y-2">
+                                <p className="text-xs text-outline">
+                                  {isDebouncingProductSearch
+                                    ? "Menunggu jeda 3 detik tanpa ketikan..."
+                                    : "Tidak ada produk yang cocok."}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSwitchToManual(productSearchQuery.trim())}
+                                  className="text-[11px] bg-primary text-on-primary font-bold px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors shadow-sm"
+                                >
+                                  + Input Manual & Simpan Produk Ini
+                                </button>
+                              </div>
+                            ) : (
+                              productSearchResults.slice(0, 10).map((p) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => handleSelectProductItem(p)}
+                                  className="w-full text-left p-2.5 hover:bg-surface-bright flex items-center justify-between gap-2.5 transition-colors group"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    {p.image_url ? (
+                                      <img
+                                        src={getImageUrl(p.image_url)}
+                                        alt={p.name}
+                                        className="w-9 h-9 rounded-lg object-cover border border-outline-variant/30 shrink-0"
+                                      />
+                                    ) : (
+                                      <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-outline group-hover:text-primary shrink-0">
+                                        <span className="material-symbols-outlined text-[18px]">shopping_basket</span>
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-xs text-on-surface truncate group-hover:text-primary">
+                                          {p.name}
+                                        </span>
+                                        {p.category_name && (
+                                          <span className="text-[9px] px-1.5 py-0.5 bg-surface-container rounded text-outline border border-outline-variant/20">
+                                            {p.category_name}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] text-outline block truncate mt-0.5">
+                                        Satuan: {p.base_unit || "pcs"} {p.last_price_per_unit > 0 ? `· Rp ${Number(p.last_price_per_unit).toLocaleString("id-ID")}` : ""} {p.cheapest_store_name ? `· ${p.cheapest_store_name}` : ""}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 text-[11px] font-bold text-primary opacity-80 group-hover:opacity-100 shrink-0">
+                                    <span>Pilih</span>
+                                    <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                                  </div>
+                                </button>
+                              ))
+                            )}
+                          </div>
+
+                          {/* Footer */}
+                          <div className="p-2 px-3 bg-surface-container border-t border-outline-variant/20 flex items-center justify-between text-[10px]">
+                            <span className="text-outline">
+                              Tidak menemukan barang yang dicari?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleSwitchToManual(productSearchQuery.trim())}
+                              className="text-primary hover:underline font-bold"
+                            >
+                              + Input Manual
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between text-[10px] text-outline px-1">
+                        <span>Klik search untuk 10 produk terbaru, ketik untuk mencari (jeda 3 dtk).</span>
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchToManual("")}
+                          className="text-primary hover:underline font-bold"
+                        >
+                          + Input Manual
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mode 2: Input Manual */}
+              {productSelectionMode === "manual" && (
+                <div className="space-y-2.5">
+                  <div>
+                    <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                      Nama Barang / Produk
+                    </label>
+                    <input
+                      type="text"
+                      value={manualProductName}
+                      onChange={(e) => {
+                        setManualProductName(e.target.value);
+                        if (!notes || notes === manualProductName) {
+                          setNotes(e.target.value);
+                        }
+                      }}
+                      placeholder="Contoh: Beras Ramos 5kg, Telur Ayam 1kg, Kopi..."
+                      className="w-full bg-surface-container rounded-lg px-3 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs"
+                    />
+                  </div>
+
+                  {/* Checkbox: Simpan Product? */}
+                  <div className="pt-0.5">
+                    <label className="flex items-start gap-2 cursor-pointer select-none text-xs text-on-surface">
+                      <input
+                        type="checkbox"
+                        checked={saveAsNewProduct}
+                        onChange={(e) => setSaveAsNewProduct(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 rounded border-outline-variant/40 text-primary focus:ring-primary accent-primary cursor-pointer shrink-0"
+                      />
+                      <div>
+                        <span className="font-semibold text-primary block leading-tight">
+                          Simpan produk ini ke Katalog Produk & Pantauan Harga?
+                        </span>
+                        <span className="text-[10px] text-outline block leading-tight mt-0.5">
+                          Sertakan detail lengkap (kategori, satuan, barcode, dan foto) untuk disimpan permanen.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Detail Input Barangnya (jika Simpan Product dicentang) */}
+                  {saveAsNewProduct && (
+                    <div className="bg-surface-container/60 p-3 rounded-xl border border-primary/30 space-y-2.5 animate-in fade-in duration-150">
+                      <span className="text-[10px] font-bold text-primary uppercase tracking-wider block">
+                        Detail Barang Baru:
+                      </span>
+
+                      {/* Baris 1: Kategori Produk & Satuan Beli */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                            Kategori Produk
+                          </label>
+                          <select
+                            value={newProductData.category_id}
+                            onChange={(e) => setNewProductData({ ...newProductData, category_id: e.target.value })}
+                            className="w-full bg-surface-container-high rounded-lg px-2.5 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs"
+                          >
+                            <option value="">Pilih Kategori...</option>
+                            {productCategories.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                            Satuan Beli
+                          </label>
+                          <select
+                            value={newProductData.purchase_unit}
+                            onChange={(e) => {
+                              const newUnit = e.target.value;
+                              const isPkg = PACKAGING_UNITS.includes(newUnit.toLowerCase());
+                              let defaultUnitsPerPkg = newProductData.units_per_package;
+                              if (newUnit === "lusin" && !defaultUnitsPerPkg) {
+                                defaultUnitsPerPkg = 12;
+                              }
+                              setNewProductData((prev) => ({
+                                ...prev,
+                                purchase_unit: newUnit,
+                                units_per_package: isPkg ? defaultUnitsPerPkg : "",
+                              }));
+                            }}
+                            className="w-full bg-surface-container-high rounded-lg px-2.5 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs font-semibold"
+                          >
+                            <optgroup label="Satuan Lepas / Berat">
+                              <option value="pcs">Pcs / Butir / Buah</option>
+                              <option value="kg">Kilogram (kg)</option>
+                              <option value="gram">Gram (gr)</option>
+                              <option value="liter">Liter (L)</option>
+                              <option value="ikat">Ikat</option>
+                              <option value="botol">Botol</option>
+                            </optgroup>
+                            <optgroup label="Kemasan / Grosir">
+                              <option value="kardus">Kardus / Karton</option>
+                              <option value="pack">Pack / Kantong</option>
+                              <option value="dus">Dus / Box</option>
+                              <option value="lusin">Lusin (12 pcs)</option>
+                              <option value="renceng">Renceng</option>
+                              <option value="tray">Tray (Telur)</option>
+                            </optgroup>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Baris 2: Jumlah Beli & Isi Kemasan */}
+                      <div className={`grid gap-2.5 ${isNewProductPackaging ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+                        <div>
+                          <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                            Jumlah Beli (Qty)
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0.01"
+                            value={newProductData.purchase_qty}
+                            onChange={(e) => setNewProductData({ ...newProductData, purchase_qty: e.target.value })}
+                            className="w-full bg-surface-container-high rounded-lg px-3 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs font-semibold"
+                          />
+                        </div>
+
+                        {isNewProductPackaging && (
+                          <div>
+                            <label className="block text-[10px] font-bold text-amber-300 uppercase mb-1 truncate">
+                              Isi per {newProductData.purchase_unit || "Kemasan"} (pcs) *
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="1"
+                              placeholder="Misal: 24 atau 30"
+                              value={newProductData.units_per_package}
+                              onChange={(e) => setNewProductData((prev) => ({ ...prev, units_per_package: e.target.value }))}
+                              className="w-full bg-amber-500/10 border border-amber-500/40 rounded-lg px-3 py-2 text-xs text-amber-200 placeholder:text-amber-300/40 focus:outline-none focus:border-amber-400 font-bold"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Baris 3: Diskon Produk (Nominal / Persen) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                            Tipe Diskon Barang
+                          </label>
+                          <select
+                            value={newProductData.discount_type}
+                            onChange={(e) => setNewProductData({ ...newProductData, discount_type: e.target.value })}
+                            className="w-full bg-surface-container-high rounded-lg px-2.5 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs"
+                          >
+                            <option value="amount">Potongan Nominal (Rp)</option>
+                            <option value="percent">Persentase (%)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                            Nilai Diskon {newProductData.discount_type === "percent" ? "(%)" : "(Rp)"}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder={newProductData.discount_type === "percent" ? "Contoh: 10" : "Contoh: 5000"}
+                            value={newProductData.discount_value}
+                            onChange={(e) => setNewProductData({ ...newProductData, discount_value: e.target.value })}
+                            className="w-full bg-surface-container-high rounded-lg px-3 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs font-semibold"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Live Preview Card: Diskon & Harga Satuan Bersih */}
+                      {numericPriceTotal > 0 && (
+                        <div className="p-3 bg-gradient-to-r from-primary/15 via-emerald-500/10 to-transparent border border-primary/30 rounded-xl text-xs space-y-1.5 animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div>
+                              <span className="text-[9px] text-outline uppercase font-bold tracking-wider block">
+                                Harga Bersih (Net)
+                              </span>
+                              <strong className="text-sm font-bold text-emerald-400">
+                                Rp {Math.round(calculatedPriceFinal).toLocaleString("id-ID")}
+                              </strong>
+                              {calculatedDiscountAmount > 0 && (
+                                <span className="text-[10px] text-outline ml-1 line-through">
+                                  Rp {Math.round(numericPriceTotal).toLocaleString("id-ID")}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-right">
+                              <span className="text-[9px] text-outline uppercase font-bold tracking-wider block">
+                                Harga Satuan Bersih
+                              </span>
+                              <strong className="text-sm font-bold text-primary">
+                                Rp {Math.round(calculatedPricePerUnit).toLocaleString("id-ID")} / {isNewProductPackaging ? "pcs" : (newProductData.purchase_unit || "pcs")}
+                              </strong>
+                            </div>
+                          </div>
+
+                          <div className="text-[10px] text-outline-variant flex items-center justify-between border-t border-outline-variant/20 pt-1 flex-wrap gap-1">
+                            <span>
+                              Total Unit Dasar: <strong className="text-on-surface">{calculatedNewProductTotalUnits} {isNewProductPackaging ? "pcs" : (newProductData.purchase_unit || "pcs")}</strong>
+                            </span>
+                            {isNewProductPackaging && (
+                              <span className="text-amber-300">
+                                ({numericNewProductQty} {newProductData.purchase_unit} @ {numericUnitsPerPkg || 1} pcs)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Baris 4: Penyimpanan Dapur & Estimasi Kedaluwarsa */}
+                      <div className="p-3 bg-surface-container-high/60 rounded-xl border border-outline-variant/20 space-y-2">
+                        <span className="text-[10px] font-bold text-outline uppercase tracking-wider block">
+                          Penyimpanan & Estimasi Kedaluwarsa:
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                              Tempat Penyimpanan
+                            </label>
+                            <select
+                              value={newProductData.storage_type}
+                              onChange={(e) => setNewProductData({ ...newProductData, storage_type: e.target.value })}
+                              className="w-full bg-surface-container rounded-lg px-2.5 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs"
+                            >
+                              <option value="room">Suhu Ruang (Dapur / Lemari)</option>
+                              <option value="chiller">Kulkas / Chiller</option>
+                              <option value="freezer">Freezer / Beku</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[10px] font-bold text-outline uppercase">
+                                Estimasi Kedaluwarsa
+                              </label>
+                              {newProductData.expiry_is_estimated && (
+                                <span className="text-[9px] text-primary font-semibold bg-primary/10 px-1.5 py-0.2 rounded">
+                                  Otomatis Kategori
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              type="date"
+                              value={newProductData.expiry_date}
+                              onChange={(e) => setNewProductData({
+                                ...newProductData,
+                                expiry_date: e.target.value,
+                                expiry_is_estimated: false,
+                              })}
+                              className="w-full bg-surface-container rounded-lg px-2.5 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Baris 5: Barcode & Foto Produk (2 Kolom di Desktop) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-start">
+                        {/* Barcode with Scan Button */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                            Barcode / SKU (Opsional)
+                          </label>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={newProductData.barcode}
+                              onChange={(e) => setNewProductData({ ...newProductData, barcode: e.target.value })}
+                              placeholder="Scan atau ketik barcode..."
+                              className="flex-1 bg-surface-container-high rounded-lg px-2.5 py-2 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setIsBarcodeScanOpen(true)}
+                              className="px-2.5 py-2 bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors shrink-0"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">barcode_scanner</span>
+                              <span>Scan</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Upload Foto Produk */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                            Foto Produk (Opsional)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            {newProductData.image_url ? (
+                              <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-primary/30 shrink-0 group">
+                                <img
+                                  src={getImageUrl(newProductData.image_url)}
+                                  alt="Product"
+                                  className="w-full h-full object-cover"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setNewProductData({ ...newProductData, image_url: "" })}
+                                  className="absolute inset-0 bg-black/60 flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                                </button>
+                              </div>
+                            ) : null}
+
+                            <input
+                              type="file"
+                              ref={fileInputRef}
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleProductImageUpload}
+                            />
+                            <button
+                              type="button"
+                              disabled={uploadingImage}
+                              onClick={() => fileInputRef.current?.click()}
+                              className="flex-1 px-3 py-2 bg-surface-container-high border border-outline-variant/30 rounded-lg text-[11px] font-semibold text-on-surface hover:border-primary/50 flex items-center justify-center gap-1.5 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[16px] text-primary">
+                                {uploadingImage ? "progress_activity" : "add_photo_alternate"}
+                              </span>
+                              <span>{uploadingImage ? "Mengunggah..." : newProductData.image_url ? "Ganti Foto" : "Unggah Foto / Kamera"}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Catatan / Spesifikasi Produk */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-outline uppercase mb-1">
+                          Catatan / Spesifikasi (Opsional)
+                        </label>
+                        <input
+                          type="text"
+                          value={newProductData.notes}
+                          onChange={(e) => setNewProductData({ ...newProductData, notes: e.target.value })}
+                          placeholder="Merk favorit, kemasan, atau catatan rasa..."
+                          className="w-full bg-surface-container-high rounded-lg px-2.5 py-1.5 text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Nominal & Kategori Pos - Grid Sejajar Row-by-Row */}
           <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-end">
             <div className="min-h-[28px] flex items-end justify-between">
@@ -890,31 +1929,118 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
           )}
 
           {/* Toko / Sumber & Tanggal - Grid Sejajar Row-by-Row */}
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-end">
-            <div className="min-h-[28px] flex items-end">
-              <label className="text-[11px] font-bold text-outline uppercase leading-tight">
-                {type === "income" ? "Sumber Dana / Pengirim" : "Nama Toko / Penerima"}
-              </label>
-            </div>
-            <div className="min-h-[28px] flex items-end">
-              <label className="text-[11px] font-bold text-outline uppercase leading-tight">Tanggal</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-2 items-end">
+            <div>
+              <div className="min-h-[24px] flex items-center justify-between mb-1">
+                <label className="text-[11px] font-bold text-outline uppercase leading-tight">
+                  {type === "income" ? "Sumber Dana / Pengirim" : "Nama Toko / Penerima"}
+                </label>
+                {type === "expense" && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddStoreOpen(true)}
+                    className="text-[10px] font-bold text-primary hover:text-primary/80 flex items-center gap-0.5 transition-colors"
+                    title="Tambah toko baru ke database"
+                  >
+                    <span className="material-symbols-outlined text-[13px]">add_business</span>
+                    <span>+ Toko Baru</span>
+                  </button>
+                )}
+              </div>
+
+              {type === "income" ? (
+                <input
+                  type="text"
+                  value={merchant}
+                  onChange={(e) => setMerchant(e.target.value)}
+                  placeholder="Misal: Setoran Tunai, Transfer Rekening, Gaji"
+                  className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary text-xs"
+                />
+              ) : !isCustomStore ? (
+                <div className="flex gap-1.5">
+                  <select
+                    value={selectedStoreId || (merchant && !stores.some((s) => s.name === merchant) ? "__custom__" : "")}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__custom__") {
+                        setIsCustomStore(true);
+                        setSelectedStoreId("");
+                      } else if (val === "__new_store__") {
+                        setIsAddStoreOpen(true);
+                      } else if (val) {
+                        const found = stores.find((s) => String(s.id) === String(val));
+                        if (found) {
+                          setSelectedStoreId(String(found.id));
+                          setMerchant(found.name);
+                        }
+                      } else {
+                        setSelectedStoreId("");
+                        setMerchant("");
+                      }
+                    }}
+                    className="flex-1 h-10 bg-surface-container-low rounded-lg px-2.5 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary text-xs font-medium"
+                  >
+                    <option value="">-- Pilih Toko (10 Data Terbaru) --</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({STORE_TYPE_LABELS[s.store_type] || s.store_type || "Toko"}) {s.is_mobile ? "🛵" : ""}
+                      </option>
+                    ))}
+                    <option disabled>──────────</option>
+                    <option value="__custom__">✏️ + Ketik Nama Toko Manual / Lainnya</option>
+                    <option value="__new_store__">🏢 + Tambah Toko Baru ke Database</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomStore(true);
+                      setSelectedStoreId("");
+                    }}
+                    className="px-2.5 h-10 bg-surface-container hover:bg-surface-bright text-outline hover:text-on-surface rounded-lg text-xs font-semibold border border-outline-variant/20 flex items-center justify-center shrink-0 transition-colors"
+                    title="Ketik manual nama toko"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={merchant}
+                    onChange={(e) => setMerchant(e.target.value)}
+                    placeholder="Ketik nama toko / penerima..."
+                    className="flex-1 h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary text-xs"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomStore(false);
+                      const match = stores.find((s) => s.name.toLowerCase() === merchant.trim().toLowerCase());
+                      if (match) {
+                        setSelectedStoreId(String(match.id));
+                      } else {
+                        setSelectedStoreId("");
+                      }
+                    }}
+                    className="px-2.5 h-10 bg-surface-container hover:bg-surface-bright text-outline hover:text-on-surface rounded-lg text-xs font-semibold border border-outline-variant/20 flex items-center justify-center shrink-0 transition-colors"
+                    title="Kembali ke pilihan dropdown toko"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>
-              <input
-                type="text"
-                value={merchant}
-                onChange={(e) => setMerchant(e.target.value)}
-                placeholder={type === "income" ? "Misal: Setoran Tunai, Transfer Rekening" : "Misal: Superindo Merr"}
-                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary"
-              />
-            </div>
-            <div>
+              <div className="min-h-[24px] flex items-center mb-1">
+                <label className="text-[11px] font-bold text-outline uppercase leading-tight">Tanggal</label>
+              </div>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary"
+                className="w-full h-10 bg-surface-container-low rounded-lg px-3 py-2 text-on-surface border border-outline-variant/20 focus:outline-none focus:border-primary text-xs"
               />
             </div>
           </div>
@@ -964,6 +2090,23 @@ export function AddTransactionModal({ isOpen, onClose, onSuccess, initialData = 
           </div>
         </form>
       </div>
+
+      {/* Barcode Scanner Modal for Product Barcode */}
+      <ScanBarcodeModal
+        isOpen={isBarcodeScanOpen}
+        onClose={() => setIsBarcodeScanOpen(false)}
+        onScan={(scanned) => setNewProductData((prev) => ({ ...prev, barcode: scanned }))}
+        title="Pindai Barcode Produk Baru"
+        description="Arahkan kamera ke barcode kemasan barang"
+      />
+
+      {/* Add Store Modal */}
+      <AddStoreModal
+        isOpen={isAddStoreOpen}
+        onClose={() => setIsAddStoreOpen(false)}
+        onStoreCreated={handleStoreCreated}
+        initialName=""
+      />
     </div>
   );
 }

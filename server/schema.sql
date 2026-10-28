@@ -236,6 +236,9 @@ CREATE TABLE IF NOT EXISTS price_products (
     name VARCHAR(200) NOT NULL,
     name_normalized VARCHAR(200) NOT NULL,
     base_unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
+    image_url TEXT,
+    barcode VARCHAR(100),
+    notes TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

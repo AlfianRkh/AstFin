@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -40,6 +41,7 @@ func main() {
 	pantryH := handlers.NewPantryHandler(db)
 	dashH := handlers.NewDashboardHandler(db)
 	priceH := handlers.NewPriceHandler(db)
+	uploadH := handlers.NewUploadHandler("./uploads")
 
 	r := chi.NewRouter()
 
@@ -75,6 +77,12 @@ func main() {
 			"time":    time.Now().Format(time.RFC3339),
 		})
 	})
+
+	// Serve Static Uploads
+	workDir, _ := os.Getwd()
+	uploadsPath := filepath.Join(workDir, "uploads")
+	_ = os.MkdirAll(uploadsPath, 0755)
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsPath))))
 
 	// API V1
 	r.Route("/api/v1", func(api chi.Router) {
@@ -162,9 +170,13 @@ func main() {
 			p.Get("/price/products", priceH.GetPriceProducts)
 			p.Post("/price/products", priceH.CreatePriceProduct)
 			p.Get("/price/products/{id}", priceH.GetPriceProductDetail)
+			p.Put("/price/products/{id}", priceH.UpdatePriceProduct)
 			p.Delete("/price/products/{id}", priceH.DeletePriceProduct)
 			p.Post("/price/products/{id}/entries", priceH.AddPriceEntry)
 			p.Delete("/price/entries/{id}", priceH.DeletePriceEntry)
+
+			// File Upload
+			p.Post("/upload", uploadH.UploadFile)
 
 			p.Post("/price/check", priceH.PriceCheck)
 			p.Get("/price/settings", priceH.GetPriceSettings)

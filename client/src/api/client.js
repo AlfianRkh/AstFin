@@ -108,7 +108,10 @@ export const api = {
   deleteShoppingItem: (id) => request(`/shopping/${id}`, { method: "DELETE" }),
 
   // Compare Price Product
-  getStores: () => request("/price/stores"),
+  getStores: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/price/stores${q ? `?${q}` : ""}`);
+  },
   createStore: (data) => request("/price/stores", { method: "POST", body: JSON.stringify(data) }),
   updateStore: (id, data) => request(`/price/stores/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteStore: (id) => request(`/price/stores/${id}`, { method: "DELETE" }),
@@ -120,9 +123,29 @@ export const api = {
   },
   createPriceProduct: (data) => request("/price/products", { method: "POST", body: JSON.stringify(data) }),
   getPriceProductDetail: (id) => request(`/price/products/${id}`),
+  updatePriceProduct: (id, data) => request(`/price/products/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deletePriceProduct: (id) => request(`/price/products/${id}`, { method: "DELETE" }),
   addPriceEntry: (productId, data) => request(`/price/products/${productId}/entries`, { method: "POST", body: JSON.stringify(data) }),
   deletePriceEntry: (id) => request(`/price/entries/${id}`, { method: "DELETE" }),
+
+  // Image Upload
+  uploadImage: async (file) => {
+    const token = localStorage.getItem("omni_token");
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch(`${API_BASE_URL}/upload`, {
+      method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Gagal mengunggah gambar");
+    }
+    return data;
+  },
 
   checkPrice: (data) => request("/price/check", { method: "POST", body: JSON.stringify(data) }),
   getPriceSettings: () => request("/price/settings"),
@@ -132,3 +155,13 @@ export const api = {
   searchGeo: (query) => request(`/geo/search?q=${encodeURIComponent(query)}`),
   reverseGeo: (lat, lng) => request(`/geo/reverse?lat=${lat}&lng=${lng}`),
 };
+
+export function getImageUrl(path) {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
+    return path;
+  }
+  const baseUrl = (import.meta.env.VITE_API_URL || "http://localhost:8080/api/v1").replace(/\/api\/v1\/?$/, "");
+  return `${baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
