@@ -27,6 +27,7 @@ type Config struct {
 	SMTPUser     string
 	SMTPPassword string
 	SMTPFrom     string
+	CronSecret   string
 }
 
 func Load() *Config {
@@ -117,6 +118,11 @@ func Load() *Config {
 		}
 	}
 
+	cronSecret := os.Getenv("CRON_SECRET")
+	if cronSecret == "" {
+		cronSecret = "omnilife_cron_secret_2026"
+	}
+
 	return &Config{
 		Port:         port,
 		DBDriver:     dbDriver,
@@ -136,5 +142,6 @@ func Load() *Config {
 		SMTPUser:     smtpUser,
 		SMTPPassword: smtpPassword,
 		SMTPFrom:     smtpFrom,
+		CronSecret:   cronSecret,
 	}
 }

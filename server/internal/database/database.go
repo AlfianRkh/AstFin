@@ -289,6 +289,43 @@ func migrateSchema(db *sql.DB, driver string) error {
 			share_all_entries INTEGER DEFAULT 0
 		);
 
+		CREATE TABLE IF NOT EXISTS whatsapp_settings (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+			phone_number TEXT NOT NULL DEFAULT '',
+			is_enabled INTEGER DEFAULT 1,
+			provider TEXT NOT NULL DEFAULT 'wa_me',
+			api_key TEXT DEFAULT '',
+			gateway_url TEXT DEFAULT '',
+			reminder_time TEXT DEFAULT '08:00',
+			pantry_expiry_enabled INTEGER DEFAULT 1,
+			pantry_days_before INTEGER DEFAULT 3,
+			debt_due_enabled INTEGER DEFAULT 1,
+			debt_days_before INTEGER DEFAULT 1,
+			debt_overdue_enabled INTEGER DEFAULT 1,
+			pantry_low_stock_enabled INTEGER DEFAULT 1,
+			radar_target_enabled INTEGER DEFAULT 1,
+			budget_alert_enabled INTEGER DEFAULT 1,
+			template_pantry_expiry TEXT DEFAULT 'Halo {nama}! ⚠️ *Pengingat Stok Dapur*: Produk *{nama_produk}* tersisa {jumlah} {satuan} di {kategori} akan *KADALUWARSA* dalam {hari_sisa} hari (Tgl: {tgl_kadaluarsa}). Segera olah atau konsumsi!',
+			template_debt_due TEXT DEFAULT 'Halo {nama}! 💳 *Pengingat Cicilan/Tagihan*: Tagihan *{nama_kontak}* sebesar *Rp {nominal}* akan jatuh tempo pada *{jatuh_tempo}* ({hari_sisa} hari lagi). Jangan lupa disiapkan ya!',
+			template_debt_overdue TEXT DEFAULT 'Halo {nama}! 🚨 *Peringatan Jatuh Tempo*: Tagihan *{nama_kontak}* sebesar *Rp {nominal}* telah *MELEWATI JATUH TEMPO* sejak {jatuh_tempo}. Segera selesaikan kewajiban Anda.',
+			template_low_stock TEXT DEFAULT 'Halo {nama}! 📦 *Pantry Menipis*: Stok *{nama_produk}* di {kategori} tersisa {jumlah} {satuan} (di bawah batas min {min_jumlah} {satuan}). Segera restock!',
+			template_radar_target TEXT DEFAULT 'Halo {nama}! 🎯 *Radar Deal Sinyal*: Produk idaman *{nama_produk}* di {platform} telah turun ke harga *Rp {harga_sekarang}* (Target: Rp {target_harga})! Deal Score: {deal_score}%. Waktunya checkout!',
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS whatsapp_reminder_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			reminder_type TEXT NOT NULL,
+			title TEXT NOT NULL,
+			recipient_phone TEXT NOT NULL,
+			message TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'sent',
+			error_message TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
 		CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, transaction_date);
 		CREATE INDEX IF NOT EXISTS idx_debts_user ON debts(user_id, status);
 		CREATE INDEX IF NOT EXISTS idx_radar_user ON radar_items(user_id, status);
@@ -297,6 +334,7 @@ func migrateSchema(db *sql.DB, driver string) error {
 		CREATE INDEX IF NOT EXISTS idx_price_entries_product ON price_entries(product_id, observed_at);
 		CREATE INDEX IF NOT EXISTS idx_price_entries_user ON price_entries(user_id, observed_at);
 		CREATE INDEX IF NOT EXISTS idx_stores_user ON stores(user_id, name);
+		CREATE INDEX IF NOT EXISTS idx_wa_logs_user ON whatsapp_reminder_logs(user_id, created_at);
 		`
 	} else {
 		// PostgreSQL Schema
@@ -532,6 +570,44 @@ func migrateSchema(db *sql.DB, driver string) error {
 			share_all_entries BOOLEAN DEFAULT FALSE
 		);
 
+		CREATE TABLE IF NOT EXISTS whatsapp_settings (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			phone_number VARCHAR(30) NOT NULL DEFAULT '',
+			is_enabled BOOLEAN DEFAULT TRUE,
+			provider VARCHAR(50) NOT NULL DEFAULT 'wa_me',
+			api_key TEXT DEFAULT '',
+			gateway_url TEXT DEFAULT '',
+			reminder_time VARCHAR(10) DEFAULT '08:00',
+			pantry_expiry_enabled BOOLEAN DEFAULT TRUE,
+			pantry_days_before INTEGER DEFAULT 3,
+			debt_due_enabled BOOLEAN DEFAULT TRUE,
+			debt_days_before INTEGER DEFAULT 1,
+			debt_overdue_enabled BOOLEAN DEFAULT TRUE,
+			pantry_low_stock_enabled BOOLEAN DEFAULT TRUE,
+			radar_target_enabled BOOLEAN DEFAULT TRUE,
+			budget_alert_enabled BOOLEAN DEFAULT TRUE,
+			template_pantry_expiry TEXT DEFAULT 'Halo {nama}! ⚠️ *Pengingat Stok Dapur*: Produk *{nama_produk}* tersisa {jumlah} {satuan} di {kategori} akan *KADALUWARSA* dalam {hari_sisa} hari (Tgl: {tgl_kadaluarsa}). Segera olah atau konsumsi!',
+			template_debt_due TEXT DEFAULT 'Halo {nama}! 💳 *Pengingat Cicilan/Tagihan*: Tagihan *{nama_kontak}* sebesar *Rp {nominal}* akan jatuh tempo pada *{jatuh_tempo}* ({hari_sisa} hari lagi). Jangan lupa disiapkan ya!',
+			template_debt_overdue TEXT DEFAULT 'Halo {nama}! 🚨 *Peringatan Jatuh Tempo*: Tagihan *{nama_kontak}* sebesar *Rp {nominal}* telah *MELEWATI JATUH TEMPO* sejak {jatuh_tempo}. Segera selesaikan kewajiban Anda.',
+			template_low_stock TEXT DEFAULT 'Halo {nama}! 📦 *Pantry Menipis*: Stok *{nama_produk}* di {kategori} tersisa {jumlah} {satuan} (di bawah batas min {min_jumlah} {satuan}). Segera restock!',
+			template_radar_target TEXT DEFAULT 'Halo {nama}! 🎯 *Radar Deal Sinyal*: Produk idaman *{nama_produk}* di {platform} telah turun ke harga *Rp {harga_sekarang}* (Target: Rp {target_harga})! Deal Score: {deal_score}%. Waktunya checkout!',
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			CONSTRAINT uq_user_whatsapp_settings UNIQUE (user_id)
+		);
+
+		CREATE TABLE IF NOT EXISTS whatsapp_reminder_logs (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			reminder_type VARCHAR(50) NOT NULL,
+			title VARCHAR(200) NOT NULL,
+			recipient_phone VARCHAR(30) NOT NULL,
+			message TEXT NOT NULL,
+			status VARCHAR(30) NOT NULL DEFAULT 'sent',
+			error_message TEXT,
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		);
+
 		CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, transaction_date);
 		CREATE INDEX IF NOT EXISTS idx_debts_user ON debts(user_id, status);
 		CREATE INDEX IF NOT EXISTS idx_radar_user ON radar_items(user_id, status);
@@ -540,6 +616,7 @@ func migrateSchema(db *sql.DB, driver string) error {
 		CREATE INDEX IF NOT EXISTS idx_price_entries_product ON price_entries(product_id, observed_at);
 		CREATE INDEX IF NOT EXISTS idx_price_entries_user ON price_entries(user_id, observed_at);
 		CREATE INDEX IF NOT EXISTS idx_stores_user ON stores(user_id, name);
+		CREATE INDEX IF NOT EXISTS idx_wa_logs_user ON whatsapp_reminder_logs(user_id, created_at);
 		`
 	}
 
@@ -593,6 +670,42 @@ func migrateSchema(db *sql.DB, driver string) error {
 				created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 				CONSTRAINT uq_user_pantry_storage_zone UNIQUE (user_id, name)
 			);
+			CREATE TABLE IF NOT EXISTS whatsapp_settings (
+				id SERIAL PRIMARY KEY,
+				user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				phone_number VARCHAR(30) NOT NULL DEFAULT '',
+				is_enabled BOOLEAN DEFAULT TRUE,
+				provider VARCHAR(50) NOT NULL DEFAULT 'wa_me',
+				api_key TEXT DEFAULT '',
+				gateway_url TEXT DEFAULT '',
+				reminder_time VARCHAR(10) DEFAULT '08:00',
+				pantry_expiry_enabled BOOLEAN DEFAULT TRUE,
+				pantry_days_before INTEGER DEFAULT 3,
+				debt_due_enabled BOOLEAN DEFAULT TRUE,
+				debt_days_before INTEGER DEFAULT 1,
+				debt_overdue_enabled BOOLEAN DEFAULT TRUE,
+				pantry_low_stock_enabled BOOLEAN DEFAULT TRUE,
+				radar_target_enabled BOOLEAN DEFAULT TRUE,
+				budget_alert_enabled BOOLEAN DEFAULT TRUE,
+				template_pantry_expiry TEXT DEFAULT 'Halo {nama}! ⚠️ *Pengingat Stok Dapur*: Produk *{nama_produk}* tersisa {jumlah} {satuan} di {kategori} akan *KADALUWARSA* dalam {hari_sisa} hari (Tgl: {tgl_kadaluarsa}). Segera olah atau konsumsi!',
+				template_debt_due TEXT DEFAULT 'Halo {nama}! 💳 *Pengingat Cicilan/Tagihan*: Tagihan *{nama_kontak}* sebesar *Rp {nominal}* akan jatuh tempo pada *{jatuh_tempo}* ({hari_sisa} hari lagi). Jangan lupa disiapkan ya!',
+				template_debt_overdue TEXT DEFAULT 'Halo {nama}! 🚨 *Peringatan Jatuh Tempo*: Tagihan *{nama_kontak}* sebesar *Rp {nominal}* telah *MELEWATI JATUH TEMPO* sejak {jatuh_tempo}. Segera selesaikan kewajiban Anda.',
+				template_low_stock TEXT DEFAULT 'Halo {nama}! 📦 *Pantry Menipis*: Stok *{nama_produk}* di {kategori} tersisa {jumlah} {satuan} (di bawah batas min {min_jumlah} {satuan}). Segera restock!',
+				template_radar_target TEXT DEFAULT 'Halo {nama}! 🎯 *Radar Deal Sinyal*: Produk idaman *{nama_produk}* di {platform} telah turun ke harga *Rp {harga_sekarang}* (Target: Rp {target_harga})! Deal Score: {deal_score}%. Waktunya checkout!',
+				updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+				CONSTRAINT uq_user_whatsapp_settings UNIQUE (user_id)
+			);
+			CREATE TABLE IF NOT EXISTS whatsapp_reminder_logs (
+				id SERIAL PRIMARY KEY,
+				user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				reminder_type VARCHAR(50) NOT NULL,
+				title VARCHAR(200) NOT NULL,
+				recipient_phone VARCHAR(30) NOT NULL,
+				message TEXT NOT NULL,
+				status VARCHAR(30) NOT NULL DEFAULT 'sent',
+				error_message TEXT,
+				created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+			);
 		`)
 	} else {
 		_, _ = db.Exec("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 1;")
@@ -634,6 +747,41 @@ func migrateSchema(db *sql.DB, driver string) error {
 				name TEXT NOT NULL,
 				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 				UNIQUE(user_id, name)
+			);
+			CREATE TABLE IF NOT EXISTS whatsapp_settings (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+				phone_number TEXT NOT NULL DEFAULT '',
+				is_enabled INTEGER DEFAULT 1,
+				provider TEXT NOT NULL DEFAULT 'wa_me',
+				api_key TEXT DEFAULT '',
+				gateway_url TEXT DEFAULT '',
+				reminder_time TEXT DEFAULT '08:00',
+				pantry_expiry_enabled INTEGER DEFAULT 1,
+				pantry_days_before INTEGER DEFAULT 3,
+				debt_due_enabled INTEGER DEFAULT 1,
+				debt_days_before INTEGER DEFAULT 1,
+				debt_overdue_enabled INTEGER DEFAULT 1,
+				pantry_low_stock_enabled INTEGER DEFAULT 1,
+				radar_target_enabled INTEGER DEFAULT 1,
+				budget_alert_enabled INTEGER DEFAULT 1,
+				template_pantry_expiry TEXT DEFAULT 'Halo {nama}! ⚠️ *Pengingat Stok Dapur*: Produk *{nama_produk}* tersisa {jumlah} {satuan} di {kategori} akan *KADALUWARSA* dalam {hari_sisa} hari (Tgl: {tgl_kadaluarsa}). Segera olah atau konsumsi!',
+				template_debt_due TEXT DEFAULT 'Halo {nama}! 💳 *Pengingat Cicilan/Tagihan*: Tagihan *{nama_kontak}* sebesar *Rp {nominal}* akan jatuh tempo pada *{jatuh_tempo}* ({hari_sisa} hari lagi). Jangan lupa disiapkan ya!',
+				template_debt_overdue TEXT DEFAULT 'Halo {nama}! 🚨 *Peringatan Jatuh Tempo*: Tagihan *{nama_kontak}* sebesar *Rp {nominal}* telah *MELEWATI JATUH TEMPO* sejak {jatuh_tempo}. Segera selesaikan kewajiban Anda.',
+				template_low_stock TEXT DEFAULT 'Halo {nama}! 📦 *Pantry Menipis*: Stok *{nama_produk}* di {kategori} tersisa {jumlah} {satuan} (di bawah batas min {min_jumlah} {satuan}). Segera restock!',
+				template_radar_target TEXT DEFAULT 'Halo {nama}! 🎯 *Radar Deal Sinyal*: Produk idaman *{nama_produk}* di {platform} telah turun ke harga *Rp {harga_sekarang}* (Target: Rp {target_harga})! Deal Score: {deal_score}%. Waktunya checkout!',
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			);
+			CREATE TABLE IF NOT EXISTS whatsapp_reminder_logs (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				reminder_type TEXT NOT NULL,
+				title TEXT NOT NULL,
+				recipient_phone TEXT NOT NULL,
+				message TEXT NOT NULL,
+				status TEXT NOT NULL DEFAULT 'sent',
+				error_message TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 			);
 		`)
 	}

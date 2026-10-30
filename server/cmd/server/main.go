@@ -43,6 +43,7 @@ func main() {
 	priceH := handlers.NewPriceHandler(db)
 	uploadH := handlers.NewUploadHandler("./uploads")
 	adminH := handlers.NewAdminHandler(db)
+	whatsappH := handlers.NewWhatsAppHandler(db, cfg)
 
 	r := chi.NewRouter()
 
@@ -93,6 +94,10 @@ func main() {
 		api.Get("/auth/roles", authH.GetRoles)
 		api.Post("/auth/verify-email", authH.VerifyEmail)
 		api.Post("/auth/resend-verification", authH.ResendVerificationCode)
+
+		// Public Webhook for Cron Trigger (Render Cron Job / cron-job.org / external scheduler)
+		api.Post("/whatsapp/cron-trigger", whatsappH.RunDailyCronWebhook)
+		api.Get("/whatsapp/cron-trigger", whatsappH.RunDailyCronWebhook)
 
 		// Protected Routes
 		api.Group(func(p chi.Router) {
@@ -183,6 +188,15 @@ func main() {
 			p.Post("/price/check", priceH.PriceCheck)
 			p.Get("/price/settings", priceH.GetPriceSettings)
 			p.Post("/price/settings", priceH.UpdatePriceSettings)
+
+			// WhatsApp & Attention Reminders
+			p.Get("/whatsapp/settings", whatsappH.GetSettings)
+			p.Post("/whatsapp/settings", whatsappH.UpdateSettings)
+			p.Get("/whatsapp/queue", whatsappH.GetQueue)
+			p.Post("/whatsapp/test-send", whatsappH.TestSend)
+			p.Post("/whatsapp/dispatch", whatsappH.DispatchAlert)
+			p.Get("/whatsapp/logs", whatsappH.GetLogs)
+			p.Post("/whatsapp/run-scanner", whatsappH.RunManualUserScanner)
 
 			// Geocoding Proxy (OpenStreetMap Nominatim with Rate-Limiting & In-Memory Cache)
 			p.Get("/geo/search", priceH.SearchGeo)

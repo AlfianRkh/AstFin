@@ -36,6 +36,7 @@ export function Sidebar({ isOpen = false, onClose = () => {} }) {
 
   const intelItems = [
     { path: "/ai-insights", label: "Cross-Module AI Insights", icon: "psychology" },
+    { path: "/pengaturan-whatsapp", label: "Pengingat WhatsApp", icon: "chat" },
     { path: "/pengaturan-kalibrasi", label: "Pengaturan & Kalibrasi", icon: "tune" },
     ...(isAdmin || isFinance ? [{ path: "/admin/portal", label: "Portal Administrasi", icon: "shield_person" }] : []),
     ...(isAdmin ? [{ path: "/admin/users", label: "Kelola Role & Pengguna", icon: "admin_panel_settings" }] : []),

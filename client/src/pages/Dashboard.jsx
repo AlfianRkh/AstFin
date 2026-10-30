@@ -297,9 +297,18 @@ export function Dashboard({ onOpenScan, onOpenTransaction, onOpenDebt, onOpenRad
               <span className="material-symbols-outlined text-secondary text-[22px]">hub</span>
               <h2 className="text-lg font-bold text-on-surface">Pusat Intervensi Lintas-Modul (Cross-Engine Alerts)</h2>
             </div>
-            <span className="text-xs text-outline font-semibold">
-              {s.urgent_alerts?.length || 0} Trigger Dinamis dari Database
-            </span>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/pengaturan-whatsapp"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-bold transition-all border border-emerald-500/20 shadow-sm"
+              >
+                <span className="material-symbols-outlined text-[16px]">chat</span>
+                <span>Atur Pengingat WhatsApp</span>
+              </Link>
+              <span className="text-xs text-outline font-semibold">
+                {s.urgent_alerts?.length || 0} Trigger Dinamis dari Database
+              </span>
+            </div>
           </div>
 
           {s.urgent_alerts?.length === 0 ? (

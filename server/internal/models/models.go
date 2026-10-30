@@ -391,3 +391,87 @@ type PriceCheckResult struct {
 	RecentHistory          []PriceEntry `json:"recent_history,omitempty"`
 }
 
+// ==========================================
+// WhatsApp & Reminder Setting Models
+// ==========================================
+
+type WhatsAppSettings struct {
+	ID                    int       `json:"id"`
+	UserID                int       `json:"user_id"`
+	PhoneNumber           string    `json:"phone_number"`
+	IsEnabled             bool      `json:"is_enabled"`
+	Provider              string    `json:"provider"` // wa_me, fonnte, wablas, custom_gateway
+	APIKey                string    `json:"api_key"`
+	GatewayURL            string    `json:"gateway_url"`
+	ReminderTime          string    `json:"reminder_time"`
+	PantryExpiryEnabled   bool      `json:"pantry_expiry_enabled"`
+	PantryDaysBefore      int       `json:"pantry_days_before"`
+	DebtDueEnabled        bool      `json:"debt_due_enabled"`
+	DebtDaysBefore        int       `json:"debt_days_before"`
+	DebtOverdueEnabled    bool      `json:"debt_overdue_enabled"`
+	PantryLowStockEnabled bool      `json:"pantry_low_stock_enabled"`
+	RadarTargetEnabled    bool      `json:"radar_target_enabled"`
+	BudgetAlertEnabled    bool      `json:"budget_alert_enabled"`
+	TemplatePantryExpiry  string    `json:"template_pantry_expiry"`
+	TemplateDebtDue       string    `json:"template_debt_due"`
+	TemplateDebtOverdue   string    `json:"template_debt_overdue"`
+	TemplateLowStock      string    `json:"template_low_stock"`
+	TemplateRadarTarget   string    `json:"template_radar_target"`
+	UpdatedAt             time.Time `json:"updated_at"`
+}
+
+type WhatsAppQueueItem struct {
+	ID          string  `json:"id"`
+	Type        string  `json:"type"` // pantry_expiry, debt_due, debt_overdue, low_stock, radar_target
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Severity    string  `json:"severity"` // critical, warning, info
+	Phone       string  `json:"phone"`
+	Message     string  `json:"message"`
+	WaLink      string  `json:"wa_link"`
+	TargetDate  string  `json:"target_date,omitempty"`
+	Amount      float64 `json:"amount,omitempty"`
+	DaysLeft    int     `json:"days_left"`
+	ModuleName  string  `json:"module_name"`
+	ItemName    string  `json:"item_name"`
+}
+
+type WhatsAppQueueResponse struct {
+	TotalAlerts  int                 `json:"total_alerts"`
+	PantryAlerts int                 `json:"pantry_alerts"`
+	DebtAlerts   int                 `json:"debt_alerts"`
+	RadarAlerts  int                 `json:"radar_alerts"`
+	Items        []WhatsAppQueueItem `json:"items"`
+	DailyDigest  string              `json:"daily_digest"`
+	DigestWaLink string              `json:"digest_wa_link"`
+}
+
+type WhatsAppTestSendRequest struct {
+	PhoneNumber string `json:"phone_number"`
+	Message     string `json:"message"`
+	Provider    string `json:"provider"`
+	APIKey      string `json:"api_key"`
+	GatewayURL  string `json:"gateway_url"`
+}
+
+type WhatsAppDispatchAlertRequest struct {
+	AlertID     string `json:"alert_id"`
+	Type        string `json:"type"`
+	Title       string `json:"title"`
+	PhoneNumber string `json:"phone_number"`
+	Message     string `json:"message"`
+}
+
+type WhatsAppLog struct {
+	ID             int       `json:"id"`
+	UserID         int       `json:"user_id"`
+	ReminderType   string    `json:"reminder_type"`
+	Title          string    `json:"title"`
+	RecipientPhone string    `json:"recipient_phone"`
+	Message        string    `json:"message"`
+	Status         string    `json:"status"`
+	ErrorMessage   string    `json:"error_message,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+

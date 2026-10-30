@@ -167,6 +167,15 @@ export const api = {
   // OSM Geocoding Proxy
   searchGeo: (query) => request(`/geo/search?q=${encodeURIComponent(query)}`),
   reverseGeo: (lat, lng) => request(`/geo/reverse?lat=${lat}&lng=${lng}`),
+
+  // WhatsApp & Attention Reminders
+  getWhatsAppSettings: () => request("/whatsapp/settings"),
+  updateWhatsAppSettings: (data) => request("/whatsapp/settings", { method: "POST", body: JSON.stringify(data) }),
+  getWhatsAppQueue: () => request("/whatsapp/queue"),
+  testSendWhatsApp: (data) => request("/whatsapp/test-send", { method: "POST", body: JSON.stringify(data) }),
+  dispatchWhatsAppAlert: (data) => request("/whatsapp/dispatch", { method: "POST", body: JSON.stringify(data) }),
+  getWhatsAppLogs: () => request("/whatsapp/logs"),
+  runManualScanner: (force = true) => request(`/whatsapp/run-scanner?force=${force}`, { method: "POST" }),
 };
 
 export function getImageUrl(path) {

@@ -16,6 +16,7 @@ import { CompareHarga } from "./pages/CompareHarga";
 import { UserManagement } from "./pages/UserManagement";
 import { AdminPortal } from "./pages/AdminPortal";
 import { VerifyEmail } from "./pages/VerifyEmail";
+import { WhatsAppReminderSetting } from "./pages/WhatsAppReminderSetting";
 
 // Modals
 import { ScanReceiptModal } from "./components/modals/ScanReceiptModal";
@@ -165,6 +166,10 @@ function MainLayout() {
                   onOpenTransaction={handleOpenTransaction}
                 />
               }
+            />
+            <Route
+              path="/pengaturan-whatsapp"
+              element={<WhatsAppReminderSetting key={refreshKey} />}
             />
             <Route
               path="/admin/portal"
